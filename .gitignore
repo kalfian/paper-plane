@@ -1,0 +1,33 @@
+# Docs (internal planning, tidak perlu di-commit)
+/docs/
+
+# Runtime data (sqlite + situs statis yang di-upload)
+/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Build artifacts
+/bin/
+/dist/
+/paperplane
+*.exe
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

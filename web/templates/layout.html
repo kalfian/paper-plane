@@ -1,0 +1,76 @@
+{{/*
+  layout.html — shared shell for authenticated admin pages.
+
+  Layout inheritance is clone-per-page (see internal/server/render.go): the
+  renderer clones this base and parses one content page into the clone, so each
+  page's {{define "content"}} fills the {{block "content" .}} below without any
+  cross-page collision. Pages may also override {{block "title" .}}.
+
+  Every content page's data struct exposes .CSRFToken; the logout form and the
+  body-level hx-headers below both use it, so any htmx request carries the CSRF
+  token in the X-CSRF-Token header (form posts also include the hidden field).
+*/}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+  <title>{{block "title" .}}Paper Plane{{end}}</title>
+  <link rel="stylesheet" href="/_app/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%230369a1' d='M15 1 1 7l4 2 2 4z'/></svg>">
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'
+      hx-target="#app-main" hx-select="#app-main" hx-swap="outerHTML">
+  <a class="skip-link" href="#app-main">Skip to content</a>
+
+  <header class="app-header">
+    <div class="app-header__inner">
+      <a class="brand" href="/_app/projects">
+        <svg class="brand__mark" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M22 2 2 10l7 3 3 7z" fill="currentColor"/>
+          <path d="M22 2 9 13" stroke="var(--surface)" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Paper Plane
+      </a>
+      <nav class="app-nav" aria-label="Primary">
+        <a href="/_app/projects" aria-current="page">Projects</a>
+      </nav>
+      <span class="app-header__spacer"></span>
+      <form method="POST" action="/_app/logout">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn--ghost btn--sm">Log out</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="app-main" id="app-main" tabindex="-1">
+    {{block "content" .}}{{end}}
+  </main>
+
+  <footer class="app-footer">
+    Paper Plane — self-hosted static-site host.
+  </footer>
+
+  <script src="/_app/static/vendor/htmx.min.js" defer></script>
+  <script>
+    // Keyboard-focus continuity across htmx swaps. The body swaps #app-main via
+    // outerHTML, which normally drops focus to <body>. After each settle:
+    //   - if htmx already restored focus to a matching element by id (e.g. the
+    //     Save button after saving a file), leave it — focus stays put;
+    //   - otherwise move focus to an intentional [data-autofocus] target (the
+    //     file editor's textarea), or fall back to the #app-main landmark so
+    //     keyboard and screen-reader users land on the freshly swapped content
+    //     (the success/error alert uses role=status/alert and is announced).
+    document.body.addEventListener("htmx:afterSettle", function () {
+      var active = document.activeElement;
+      if (active && active !== document.body && active !== document.documentElement) {
+        return;
+      }
+      var main = document.getElementById("app-main");
+      if (!main) return;
+      (main.querySelector("[data-autofocus]") || main).focus();
+    });
+  </script>
+</body>
+</html>

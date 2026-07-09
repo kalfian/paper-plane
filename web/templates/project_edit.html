@@ -1,0 +1,102 @@
+{{/*
+  project_edit.html — rename + manage a single project. Inherits layout.html.
+  Data: projectEditData{ CSRFToken, Project(projectView), Flash, Error }.
+  The rename form is htmx-enhanced (redirects back to this same URL). The
+  status/delete forms redirect to the project list, so they use native full
+  navigation rather than swapping this page's main region.
+*/}}
+{{define "title"}}Edit {{.Project.Name}} · Paper Plane{{end}}
+
+{{define "content"}}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/_app/projects">Projects</a>
+  <span class="breadcrumb__sep" aria-hidden="true">/</span>
+  <span aria-current="page">{{.Project.Name}}</span>
+</nav>
+
+<div class="page-head">
+  <div class="page-head__titles">
+    <h1 class="page-title">{{.Project.Name}}</h1>
+    <div class="meta-line">
+      <span>Slug <strong><code>{{.Project.Slug}}</code></strong></span>
+      <span>
+        {{if .Project.Active}}<span class="badge badge--active">active</span>
+        {{else}}<span class="badge badge--unlinked">unlinked</span>{{end}}
+      </span>
+      <span><strong>{{.Project.FileCount}}</strong> files · <strong>{{.Project.SizeHuman}}</strong></span>
+    </div>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--primary" href="/_app/projects/{{.Project.ID}}/files">Manage files</a>
+  </div>
+</div>
+
+{{if .Flash}}
+<div class="alert alert--success" role="status">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <span>{{.Flash}}</span>
+</div>
+{{end}}
+{{if .Error}}
+<div class="alert alert--error" role="alert">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <span>{{.Error}}</span>
+</div>
+{{end}}
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">Details</h2>
+    <form method="POST" action="/_app/projects/{{.Project.ID}}"
+          hx-post="/_app/projects/{{.Project.ID}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field">
+        <label class="label" for="name">Name</label>
+        <input class="input" type="text" id="name" name="name" value="{{.Project.Name}}"
+               required autocomplete="off" {{if .Error}}aria-invalid="true"{{end}}>
+      </div>
+      <div class="field">
+        <label class="label" for="slug-ro">Slug</label>
+        <input class="input" type="text" id="slug-ro" value="{{.Project.Slug}}" readonly
+               aria-describedby="slug-ro-hint">
+        <p class="hint" id="slug-ro-hint">The slug is fixed once a project is created.</p>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Save changes</button>
+        {{if .Project.Active}}
+        <a class="btn btn--ghost" href="{{.Project.SiteURL}}" target="_blank" rel="noopener">View site</a>
+        {{end}}
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">Visibility &amp; removal</h2>
+    <div class="form-actions">
+      {{if .Project.Active}}
+      <form class="inline-form" method="POST" action="/_app/projects/{{.Project.ID}}/unlink">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn">Unlink <span class="muted">(take offline, keep files)</span></button>
+      </form>
+      {{else}}
+      <form class="inline-form" method="POST" action="/_app/projects/{{.Project.ID}}/relink">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn--primary">Relink <span>(publish again)</span></button>
+      </form>
+      {{end}}
+      <form class="inline-form" method="POST" action="/_app/projects/{{.Project.ID}}/delete"
+            onsubmit="return confirm('Delete “{{.Project.Name}}” and all its files? This cannot be undone.');">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn--danger">Delete project</button>
+      </form>
+    </div>
+  </div>
+</div>
+{{end}}

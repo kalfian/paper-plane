@@ -1,0 +1,69 @@
+{{/*
+  project_new.html — create form. Inherits layout.html.
+  Data: projectNewData{ CSRFToken, Name, Slug, Error }.
+  Native (non-htmx) submit: success redirects to the file manager (new context),
+  so a full navigation is the correct behaviour.
+*/}}
+{{define "title"}}New project · Paper Plane{{end}}
+
+{{define "content"}}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/_app/projects">Projects</a>
+  <span class="breadcrumb__sep" aria-hidden="true">/</span>
+  <span aria-current="page">New</span>
+</nav>
+
+<div class="page-head">
+  <div class="page-head__titles">
+    <h1 class="page-title">New project</h1>
+    <p class="page-subtitle">Name it, pick a slug, and optionally upload files now.</p>
+  </div>
+</div>
+
+{{if .Error}}
+<div class="alert alert--error" role="alert">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <span>{{.Error}}</span>
+</div>
+{{end}}
+
+<div class="card">
+  <div class="card__body">
+    <form method="POST" action="/_app/projects" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+      <div class="field">
+        <label class="label" for="name">Name</label>
+        <input class="input" type="text" id="name" name="name" value="{{.Name}}"
+               placeholder="Marketing site" required autofocus autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label class="label" for="slug">Slug</label>
+        <input class="input" type="text" id="slug" name="slug" value="{{.Slug}}"
+               placeholder="marketing-site" pattern="[a-z0-9][a-z0-9-]*" maxlength="63"
+               required autocomplete="off" aria-describedby="slug-hint">
+        <p class="hint" id="slug-hint">Lowercase letters, digits, and hyphens; must
+          start with a letter or digit. Served at <code>/&lt;slug&gt;/</code>. Immutable after creation.</p>
+      </div>
+
+      <div class="field">
+        <label class="label" for="files">Files <span class="muted">(optional)</span></label>
+        <input class="file-input" type="file" id="files" name="files" multiple
+               aria-describedby="files-hint">
+        <p class="hint" id="files-hint">Select one or more files, or a single
+          <code>.zip</code> — it will be extracted, preserving its folder structure.
+          If you skip this, a placeholder <code>index.html</code> is created.</p>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Create project</button>
+        <a class="btn btn--ghost" href="/_app/projects">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

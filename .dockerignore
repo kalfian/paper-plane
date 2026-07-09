@@ -1,0 +1,42 @@
+# VCS
+.git
+.gitignore
+
+# CI / infra not needed inside the image
+.github
+Dockerfile
+.dockerignore
+
+# Docs & dev files
+docs
+README.md
+*.md
+
+# Runtime data & databases
+data
+tmpdata
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Build artifacts
+bin
+dist
+paperplane
+*.exe
+*.test
+*.out
+coverage.*
+
+# Env & secrets
+.env
+.env.*
+
+# Editor / OS
+.DS_Store
+.idea
+.vscode
+*.swp

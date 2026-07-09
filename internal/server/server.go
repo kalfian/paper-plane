@@ -1,0 +1,167 @@
+// Package server wires configuration, storage, and auth into an http.Handler.
+// Handlers are kept thin: they parse input, call the store/auth boundaries, and
+// render. All dependencies are injected via the Server struct (no globals).
+package server
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"github.com/kalfian/paper-plane/internal/auth"
+	"github.com/kalfian/paper-plane/internal/config"
+	"github.com/kalfian/paper-plane/internal/sitefs"
+	"github.com/kalfian/paper-plane/internal/store"
+	"github.com/kalfian/paper-plane/web"
+)
+
+// Server holds the injected dependencies and request handlers.
+type Server struct {
+	cfg   config.Config
+	store store.Store
+	fs    sitefs.FileStore
+	auth  *auth.Manager
+	rd    *renderer
+	log   *slog.Logger
+}
+
+// New bootstraps auth settings (idempotent), loads the cookie secret, builds
+// the auth manager and template renderer, and returns a ready Server. It does
+// not start listening; call Routes to obtain the handler.
+func New(ctx context.Context, cfg config.Config, st store.Store, fs sitefs.FileStore, log *slog.Logger) (*Server, error) {
+	if log == nil {
+		log = slog.Default()
+	}
+
+	if err := auth.Bootstrap(ctx, st, cfg.AdminPassword); err != nil {
+		return nil, err
+	}
+	secret, err := auth.CookieSecret(ctx, st)
+	if err != nil {
+		return nil, err
+	}
+	rd, err := newRenderer()
+	if err != nil {
+		return nil, err
+	}
+
+	secure := strings.HasPrefix(cfg.AppURL, "https://")
+	return &Server{
+		cfg:   cfg,
+		store: st,
+		fs:    fs,
+		auth:  auth.NewManager(secret, secure),
+		rd:    rd,
+		log:   log,
+	}, nil
+}
+
+// Routes builds the HTTP handler: registers routes on a ServeMux (Go 1.22
+// method+path patterns) and wraps everything with recover + logging. Auth and
+// CSRF are applied per-route.
+func (s *Server) Routes() http.Handler {
+	mux := http.NewServeMux()
+
+	// Public.
+	mux.HandleFunc("GET /_app/healthz", s.handleHealthz)
+	mux.HandleFunc("GET /_app/login", s.handleLoginForm)
+
+	// Admin static assets (CSS + vendored htmx). Public: the login page needs
+	// its stylesheet before authentication. Served from the embedded FS whose
+	// root holds the "static" directory, so /_app/static/app.css maps to
+	// static/app.css. Kept under /_app/ so it never shadows a site slug.
+	mux.Handle("GET /_app/static/", cacheStatic(http.StripPrefix("/_app/", http.FileServerFS(web.Static))))
+	mux.Handle("POST /_app/login", s.csrf(http.HandlerFunc(s.handleLoginSubmit)))
+
+	// Authenticated admin pages (GET) and mutations (POST + CSRF).
+	get := func(h http.HandlerFunc) http.Handler { return chain(h, s.requireAuth) }
+	post := func(h http.HandlerFunc) http.Handler { return chain(h, s.requireAuth, s.csrf) }
+
+	mux.Handle("POST /_app/logout", post(s.handleLogout))
+
+	// Project management.
+	mux.Handle("GET /_app/{$}", get(s.handleProjectsList))
+	mux.Handle("GET /_app/projects", get(s.handleProjectsList))
+	mux.Handle("GET /_app/projects/new", get(s.handleProjectNew))
+	mux.Handle("POST /_app/projects", post(s.handleProjectCreate))
+	mux.Handle("GET /_app/projects/{id}", get(s.handleProjectEdit))
+	mux.Handle("POST /_app/projects/{id}", post(s.handleProjectUpdate))
+	mux.Handle("POST /_app/projects/{id}/unlink", post(s.handleProjectUnlink))
+	mux.Handle("POST /_app/projects/{id}/relink", post(s.handleProjectRelink))
+	mux.Handle("POST /_app/projects/{id}/delete", post(s.handleProjectDelete))
+
+	// File management.
+	mux.Handle("GET /_app/projects/{id}/files", get(s.handleFilesList))
+	mux.Handle("POST /_app/projects/{id}/files", post(s.handleFilesUpload))
+	mux.Handle("GET /_app/projects/{id}/files/edit", get(s.handleFileEdit))
+	mux.Handle("POST /_app/projects/{id}/files/save", post(s.handleFileSave))
+	mux.Handle("POST /_app/projects/{id}/files/delete", post(s.handleFileDelete))
+
+	// Any other /_app/* GET is an unknown admin path → 404 (still auth-gated),
+	// so it is never mistaken for a site slug by the root handler below.
+	mux.Handle("GET /_app/", get(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+
+	// Fallback: everything else is a static-site request resolved by slug. The
+	// /_app/* patterns above are more specific and take precedence.
+	mux.HandleFunc("GET /", s.handleServeSite)
+
+	return chain(mux, s.recoverPanic, s.logging, s.secureHeaders)
+}
+
+// cacheStatic sets a short shared cache TTL on embedded admin assets. They are
+// versioned by the binary, so a modest TTL avoids re-fetching CSS/JS on every
+// navigation without risking stale assets across deploys.
+func cacheStatic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// handleHealthz reports liveness without auth.
+func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
+}
+
+// handleLoginForm renders the login page with a fresh CSRF token.
+func (s *Server) handleLoginForm(w http.ResponseWriter, _ *http.Request) {
+	s.rd.render(w, http.StatusOK, "login.html", loginData{
+		CSRFToken: s.auth.IssueCSRFToken(),
+	})
+}
+
+// handleLoginSubmit verifies the password and, on success, sets the session
+// cookie and redirects to the dashboard. On failure it re-renders the form with
+// an error (HTTP 200) and a fresh CSRF token.
+func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
+	password := r.FormValue("password")
+
+	hash, err := auth.AdminPasswordHash(r.Context(), s.store)
+	if err != nil {
+		s.log.Error("load admin password hash", slog.Any("error", err))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if !auth.VerifyPassword(hash, password) {
+		s.rd.render(w, http.StatusOK, "login.html", loginData{
+			CSRFToken: s.auth.IssueCSRFToken(),
+			Error:     "Incorrect password.",
+		})
+		return
+	}
+
+	http.SetCookie(w, s.auth.IssueSessionCookieForRequest(r))
+	http.Redirect(w, r, "/_app/", http.StatusSeeOther)
+}
+
+// handleLogout clears the session and redirects to the login page.
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, s.auth.ClearSessionCookie())
+	http.Redirect(w, r, loginPath, http.StatusSeeOther)
+}

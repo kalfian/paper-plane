@@ -1,0 +1,157 @@
+{{/*
+  files.html — file manager. Inherits layout.html.
+  Data: filesData{ CSRFToken, Project, Files[]fileView, Editing, EditPath,
+                   EditContent, Flash, Error }.
+
+  htmx: all interactions target/select #app-main (inherited from layout body).
+  - Upload / delete / save POST and follow the server's redirect back to this
+    page; htmx swaps the refreshed main region (no full reload).
+  - Edit / cancel are GETs that push the URL so the browser back button works.
+  Every form also degrades to a native submit when JavaScript is unavailable.
+*/}}
+{{define "title"}}Files · {{.Project.Name}} · Paper Plane{{end}}
+
+{{define "content"}}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/_app/projects">Projects</a>
+  <span class="breadcrumb__sep" aria-hidden="true">/</span>
+  <a href="/_app/projects/{{.Project.ID}}">{{.Project.Name}}</a>
+  <span class="breadcrumb__sep" aria-hidden="true">/</span>
+  <span aria-current="page">Files</span>
+</nav>
+
+<div class="page-head">
+  <div class="page-head__titles">
+    <h1 class="page-title">Files</h1>
+    <div class="meta-line">
+      <span><strong>{{.Project.FileCount}}</strong> files · <strong>{{.Project.SizeHuman}}</strong></span>
+      {{if .Project.Active}}<span><span class="badge badge--active">active</span></span>
+      {{else}}<span><span class="badge badge--unlinked">unlinked</span></span>{{end}}
+    </div>
+  </div>
+  <div class="page-head__actions">
+    {{if .Project.Active}}
+    <a class="btn btn--ghost" href="{{.Project.SiteURL}}" target="_blank" rel="noopener">View site</a>
+    {{end}}
+  </div>
+</div>
+
+{{if .Flash}}
+<div class="alert alert--success" role="status">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <span>{{.Flash}}</span>
+</div>
+{{end}}
+{{if .Error}}
+<div class="alert alert--error" role="alert">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <span>{{.Error}}</span>
+</div>
+{{end}}
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">Upload</h2>
+    <form method="POST" action="/_app/projects/{{.Project.ID}}/files"
+          enctype="multipart/form-data"
+          hx-post="/_app/projects/{{.Project.ID}}/files"
+          hx-encoding="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field">
+        <label class="label" for="files">Choose files</label>
+        <input class="file-input" type="file" id="files" name="files" multiple required
+               aria-describedby="up-hint">
+        <p class="hint" id="up-hint">Single or multiple files land at the site root.
+          A <code>.zip</code> is extracted with its folder structure preserved.</p>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">Files</h2>
+    {{if .Files}}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Path</th>
+            <th scope="col">Size</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Files}}
+          <tr {{if and $.Editing (eq .Path $.EditPath)}}class="is-editing"{{end}}>
+            <td class="cell-path">{{.Path}}</td>
+            <td class="num">{{.SizeHuman}}</td>
+            <td>
+              <div class="row-actions">
+                {{if .Editable}}
+                <a class="btn btn--ghost btn--sm"
+                   href="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
+                   hx-get="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
+                   hx-push-url="true">Edit</a>
+                {{end}}
+                <form class="inline-form" method="POST"
+                      action="/_app/projects/{{$.Project.ID}}/files/delete"
+                      hx-post="/_app/projects/{{$.Project.ID}}/files/delete"
+                      hx-confirm="Delete “{{.Path}}”?">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="path" value="{{.Path}}">
+                  <button type="submit" class="btn btn--danger btn--sm">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty">
+      <svg class="empty__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h4l2 2h7A1.5 1.5 0 0 1 20 7.5v10A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      </svg>
+      <p class="empty__title">No files yet</p>
+      <p class="empty__text">Upload files above to publish this site. HTML, CSS, JS,
+        and other text files can be edited here in the browser.</p>
+    </div>
+    {{end}}
+  </div>
+</div>
+
+{{if .Editing}}
+<div class="card" id="editor">
+  <div class="card__body">
+    <h2 class="section-title">Editing <code>{{.EditPath}}</code></h2>
+    <form method="POST" action="/_app/projects/{{.Project.ID}}/files/save"
+          hx-post="/_app/projects/{{.Project.ID}}/files/save">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="path" value="{{.EditPath}}">
+      <div class="field">
+        <label class="label" for="content">Contents</label>
+        <textarea class="textarea" id="content" name="content" spellcheck="false"
+                  autocomplete="off" autocapitalize="off" wrap="off"
+                  data-autofocus
+                  aria-label="File contents for {{.EditPath}}">{{.EditContent}}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" id="file-save" class="btn btn--primary">Save file</button>
+        <a class="btn btn--ghost" href="/_app/projects/{{.Project.ID}}/files"
+           hx-get="/_app/projects/{{.Project.ID}}/files" hx-push-url="true">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+{{end}}

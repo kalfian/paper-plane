@@ -1,0 +1,115 @@
+{{/*
+  projects.html — project list. Inherits layout.html.
+  Data: projectsData{ CSRFToken, Projects[]projectView, Flash, Error }.
+*/}}
+{{define "title"}}Projects · Paper Plane{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div class="page-head__titles">
+    <h1 class="page-title">Projects</h1>
+    <p class="page-subtitle">Static sites you host, served at <code>/&lt;slug&gt;/</code>.</p>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--primary" href="/_app/projects/new">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      New project
+    </a>
+  </div>
+</div>
+
+{{if .Flash}}
+<div class="alert alert--success" role="status">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <span>{{.Flash}}</span>
+</div>
+{{end}}
+{{if .Error}}
+<div class="alert alert--error" role="alert">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <span>{{.Error}}</span>
+</div>
+{{end}}
+
+{{if .Projects}}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Status</th>
+        <th scope="col">Files</th>
+        <th scope="col">Size</th>
+        <th scope="col">Updated</th>
+        <th scope="col"><span class="visually-hidden">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Projects}}
+      <tr>
+        <td>
+          <a class="cell-name" href="/_app/projects/{{.ID}}">{{.Name}}</a>
+          <div class="muted"><code>{{.Slug}}</code></div>
+        </td>
+        <td>
+          {{if .Active}}
+          <span class="badge badge--active">active</span>
+          {{else}}
+          <span class="badge badge--unlinked">unlinked</span>
+          {{end}}
+        </td>
+        <td class="num">{{.FileCount}}</td>
+        <td class="num">{{.SizeHuman}}</td>
+        <td class="num"><time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.UpdatedAt.Format "2 Jan 2006, 15:04"}}</time></td>
+        <td>
+          <div class="row-actions">
+            {{if .Active}}
+            <a class="btn btn--ghost btn--sm" href="{{.SiteURL}}" target="_blank" rel="noopener">View</a>
+            {{end}}
+            <a class="btn btn--ghost btn--sm" href="/_app/projects/{{.ID}}/files">Files</a>
+            {{if .Active}}
+            <form class="inline-form" method="POST" action="/_app/projects/{{.ID}}/unlink"
+                  hx-post="/_app/projects/{{.ID}}/unlink">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="btn btn--ghost btn--sm">Unlink</button>
+            </form>
+            {{else}}
+            <form class="inline-form" method="POST" action="/_app/projects/{{.ID}}/relink"
+                  hx-post="/_app/projects/{{.ID}}/relink">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="btn btn--ghost btn--sm">Relink</button>
+            </form>
+            {{end}}
+            <form class="inline-form" method="POST" action="/_app/projects/{{.ID}}/delete"
+                  hx-post="/_app/projects/{{.ID}}/delete"
+                  hx-confirm="Delete “{{.Name}}” and all its files? This cannot be undone.">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="btn btn--danger btn--sm">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty">
+  <svg class="empty__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M22 2 2 10l7 3 3 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M22 2 9 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+  </svg>
+  <p class="empty__title">No projects yet</p>
+  <p class="empty__text">Create your first project, then upload a folder or a
+    <code>.zip</code> of your static site to publish it.</p>
+  <a class="btn btn--primary" href="/_app/projects/new">New project</a>
+</div>
+{{end}}
+{{end}}
