@@ -40,6 +40,47 @@ On failure: re-render `login.html` with `Error` set, HTTP 200.
 No template. Clears the session cookie, redirects `303` to `/_app/login`.
 Must carry a valid CSRF token.
 
+### `GET /_app/setup` → `setup.html` (standalone, pre-auth)
+First-run "set a password" page. There is no `ADMIN_PASSWORD` env var; the admin
+password is chosen here on a fresh instance and stored as a bcrypt hash. Data
+`setupData`:
+
+| Field       | Type   | Notes                                            |
+|-------------|--------|--------------------------------------------------|
+| `CSRFToken` | string | Required. Hidden `csrf_token` input.             |
+| `Error`     | string | Optional. Present on validation failure.         |
+
+Form POSTs to `/_app/setup` with fields:
+- `new_password` (text, required, ≥8 and ≤72 chars)
+- `confirm_password` (text, required, must equal `new_password`)
+- `csrf_token` (hidden)
+
+Both `GET` and `POST` self-guard: once a password exists they redirect `303` to
+`/_app/login` (setup can never reset an existing credential). On success the
+hash is stored, a session cookie is issued (auto-login), and the response
+redirects `303` to `/_app/`. `GET /_app/login` redirects here while no password
+is configured.
+
+### `GET /_app/settings` → `settings.html`
+Authenticated account settings; currently a single **change password** form.
+Data `settingsData`:
+
+| Field       | Type   | Notes                                            |
+|-------------|--------|--------------------------------------------------|
+| `CSRFToken` | string | Hidden `csrf_token` input.                       |
+| `Flash`     | string | Optional success message (from `?flash=`).       |
+| `Error`     | string | Optional error message.                          |
+
+Form POSTs to `/_app/settings/password` with fields:
+- `current_password` (text, required; must match the stored hash)
+- `new_password` (text, required, ≥8 and ≤72 chars, must differ from current)
+- `confirm_password` (text, required, must equal `new_password`)
+- `csrf_token` (hidden)
+
+On success: redirect `303` to `/_app/settings?flash=Password+updated.` (the
+current session stays valid — the cookie secret is not rotated). On failure:
+re-render (HTTP 200) with `Error`; passwords are never echoed back.
+
 ## Handlers → templates (implemented in Phases 3 & 5)
 
 All pages below are authenticated (`/_app/*` behind `requireAuth`). Every

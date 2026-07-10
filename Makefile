@@ -1,7 +1,7 @@
 .PHONY: run test build tidy vet
 
-# Run the server locally. Reads env from the current shell; export
-# ADMIN_PASSWORD (and optionally DATA_DIR/PORT/APP_URL) before running.
+# Run the server locally. Loads .env automatically (optional APP_URL/DATA_DIR/
+# PORT); the admin password is set on first run at /_app/setup.
 run:
 	go run ./cmd/paperplane
 

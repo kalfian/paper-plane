@@ -1,0 +1,70 @@
+{{/*
+  settings.html — admin "Account settings" page. Inherits layout.html.
+  Data: settingsData{ CSRFToken (required), Flash (optional), Error (optional) }.
+  The change-password form is htmx-enhanced (posts to /_app/settings/password
+  and swaps this page's main region, matching project_edit.html).
+*/}}
+{{define "title"}}Settings · Paper Plane{{end}}
+
+{{define "content"}}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/_app/projects">Projects</a>
+  <span class="breadcrumb__sep" aria-hidden="true">/</span>
+  <span aria-current="page">Settings</span>
+</nav>
+
+<div class="page-head">
+  <div class="page-head__titles">
+    <h1 class="page-title">Settings</h1>
+  </div>
+</div>
+
+{{if .Flash}}
+<div class="alert alert--success" role="status">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <span>{{.Flash}}</span>
+</div>
+{{end}}
+{{if .Error}}
+<div class="alert alert--error" role="alert">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <span>{{.Error}}</span>
+</div>
+{{end}}
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">Change password</h2>
+    <form method="POST" action="/_app/settings/password"
+          hx-post="/_app/settings/password">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field">
+        <label class="label" for="current_password">Current password</label>
+        <input class="input" type="password" id="current_password" name="current_password"
+               autocomplete="current-password" required {{if .Error}}aria-invalid="true"{{end}}>
+      </div>
+      <div class="field">
+        <label class="label" for="new_password">New password</label>
+        <input class="input" type="password" id="new_password" name="new_password"
+               autocomplete="new-password" required aria-describedby="new_password-hint"
+               {{if .Error}}aria-invalid="true"{{end}}>
+        <p class="hint" id="new_password-hint">At least 8 characters.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="confirm_password">Confirm new password</label>
+        <input class="input" type="password" id="confirm_password" name="confirm_password"
+               autocomplete="new-password" required {{if .Error}}aria-invalid="true"{{end}}>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Update password</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+</content>

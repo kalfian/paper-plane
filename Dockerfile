@@ -31,7 +31,8 @@ COPY --from=build /paperplane /paperplane
 # at /data inherits this ownership from the image directory.
 COPY --from=build --chown=65532:65532 /data /data
 
-# ADMIN_PASSWORD and APP_URL are supplied at runtime, not baked into the image.
+# APP_URL is supplied at runtime, not baked into the image. There is no admin
+# password variable: it is set on first run via /_app/setup and stored hashed.
 ENV DATA_DIR=/data \
     PORT=8080
 
@@ -45,7 +46,8 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 ENTRYPOINT ["/paperplane"]
 
-# Example run (data persisted in a named volume; secrets passed at runtime):
+# Example run (data persisted in a named volume; set the admin password on first
+# run via /_app/setup):
 #   docker run -d -p 8080:8080 -v paperplane-data:/data \
-#     -e ADMIN_PASSWORD=change-me -e APP_URL=https://example.com \
+#     -e APP_URL=https://example.com \
 #     ghcr.io/kalfian/paper-plane

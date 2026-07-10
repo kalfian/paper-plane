@@ -53,10 +53,13 @@ var layoutPages = []string{
 	"project_new.html",
 	"project_edit.html",
 	"files.html",
+	"settings.html",
 }
 
 // standalonePages render their own full document without the layout shell.
-var standalonePages = []string{"login.html"}
+// login and setup both render before authentication, so they carry no admin
+// chrome.
+var standalonePages = []string{"login.html", "setup.html"}
 
 // funcMap holds template helpers available to every page.
 var funcMap = template.FuncMap{
@@ -124,6 +127,13 @@ func (rd *renderer) render(w http.ResponseWriter, status int, name string, data 
 
 // loginData is the data passed to login.html. See web/templates/CONTRACT.md.
 type loginData struct {
+	CSRFToken string
+	Error     string
+}
+
+// setupData is the data passed to setup.html (first-run password setup). See
+// web/templates/CONTRACT.md.
+type setupData struct {
 	CSRFToken string
 	Error     string
 }

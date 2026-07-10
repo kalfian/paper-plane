@@ -1,0 +1,59 @@
+{{/*
+  setup.html — standalone first-run page (no admin shell; renders before any
+  password exists). Data: setupData{ CSRFToken (required), Error (optional) }.
+*/}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Set up · Paper Plane</title>
+  <link rel="stylesheet" href="/_app/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%230369a1' d='M15 1 1 7l4 2 2 4z'/></svg>">
+</head>
+<body>
+  <main class="login-page">
+    <div class="card login-card">
+      <div class="card__body">
+        <div class="login-brand">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M22 2 2 10l7 3 3 7z" fill="currentColor"/>
+            <path d="M22 2 9 13" stroke="var(--surface)" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span class="visually-hidden">Paper Plane</span>
+        </div>
+        <h1 class="login-title">Set a password</h1>
+        <p class="login-sub">Create the admin password for this instance. You'll use it to sign in.</p>
+
+        {{if .Error}}
+        <div class="alert alert--error" role="alert">
+          <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>{{.Error}}</span>
+        </div>
+        {{end}}
+
+        <form method="POST" action="/_app/setup">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <div class="field">
+            <label class="label" for="new_password">New password</label>
+            <input class="input" type="password" id="new_password" name="new_password"
+                   autocomplete="new-password" required autofocus aria-describedby="new_password-hint"
+                   {{if .Error}}aria-invalid="true"{{end}}>
+            <p class="hint" id="new_password-hint">At least 8 characters.</p>
+          </div>
+          <div class="field">
+            <label class="label" for="confirm_password">Confirm password</label>
+            <input class="input" type="password" id="confirm_password" name="confirm_password"
+                   autocomplete="new-password" required
+                   {{if .Error}}aria-invalid="true"{{end}}>
+          </div>
+          <button type="submit" class="btn btn--primary btn--block">Create password</button>
+        </form>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

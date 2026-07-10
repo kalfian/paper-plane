@@ -39,41 +39,43 @@ Prerequisites: **Go 1.26+**.
 git clone https://github.com/kalfian/paper-plane.git
 cd paper-plane
 
-# Configure. ADMIN_PASSWORD is required; the rest have sensible defaults.
-# The .env is loaded automatically at startup (no need to export by hand).
-cp .env.example .env            # then edit ADMIN_PASSWORD
+# Optional config; all have sensible defaults. The .env is loaded automatically
+# at startup (no need to export by hand). You can skip this entirely to run with
+# defaults.
+cp .env.example .env
 
 make run
 ```
 
-Then open <http://localhost:8080/_app/login> and sign in with `ADMIN_PASSWORD`.
-The bare root (`/`) redirects to the admin app.
+Then open <http://localhost:8080/_app/setup> and **choose your admin password**
+(first run only). After that you land in the dashboard; subsequent visits sign
+in at <http://localhost:8080/_app/login>. The bare root (`/`) redirects to the
+admin app.
 
-> **Note on `ADMIN_PASSWORD`:** it is read **only at first startup**. On the
-> first run the value is hashed with bcrypt and stored in the SQLite `settings`
-> table. On subsequent startups, if a stored hash already exists it is **not**
-> overwritten — so changing the `ADMIN_PASSWORD` environment variable later does
-> **not** change the stored password. To rotate the password you must clear the
-> stored hash (e.g. start from a fresh data directory). This is intentional
-> (see `auth.Bootstrap`) so an env change never silently resets the credential.
+> **How the admin password works:** there is no `ADMIN_PASSWORD` environment
+> variable. On a fresh instance the first-run **setup** page
+> (`/_app/setup`) lets you set the password once; it is hashed with bcrypt and
+> stored in the SQLite `settings` table (never in plaintext, never in the env).
+> Once set, the setup page redirects to login and can't reset the credential. To
+> change it later, use **Settings → Change password** in the admin UI. To reset a
+> forgotten password, clear the stored hash (e.g. start from a fresh data
+> directory).
 
 ## Configuration
 
-All configuration is via environment variables (read once at startup).
+All configuration is via environment variables (read once at startup). None are
+required — the admin password is set interactively on first run, not via the
+environment.
 
-| Variable         | Required | Default | Description                                                                 |
-| ---------------- | -------- | ------- | --------------------------------------------------------------------------- |
-| `ADMIN_PASSWORD` | yes      | —       | Admin login password. Hashed with bcrypt at first bootstrap; never stored in plaintext. |
-| `APP_URL`        | no       | —       | Public base URL of the instance. Used for absolute links; trailing slash is trimmed. If it starts with `https://`, session cookies are marked `Secure`. |
-| `DATA_DIR`       | no       | `/data` | Directory for persistent data (SQLite DB + site files). Created if missing. |
-| `PORT`           | no       | `8080`  | TCP port the HTTP server listens on.                                        |
+| Variable   | Required | Default | Description                                                                 |
+| ---------- | -------- | ------- | --------------------------------------------------------------------------- |
+| `APP_URL`  | no       | —       | Public base URL of the instance. Used for absolute links; trailing slash is trimmed. If it starts with `https://`, session cookies are marked `Secure`. |
+| `DATA_DIR` | no       | `/data` | Directory for persistent data (SQLite DB + site files). Created if missing. |
+| `PORT`     | no       | `8080`  | TCP port the HTTP server listens on.                                        |
 
 Copy-paste starting point (same as [`.env.example`](.env.example)) — save as `.env`:
 
 ```sh
-# Admin password (required). Hashed with bcrypt at first bootstrap.
-ADMIN_PASSWORD=change-me
-
 # Public base URL (optional; used for absolute links + Secure cookies on https).
 APP_URL=http://localhost:8080
 
@@ -92,15 +94,14 @@ leave `DATA_DIR` at the image default (`/data`) so it matches the mounted volume
 Prebuilt images are published to `ghcr.io/kalfian/paper-plane`. CI
 (`.github/workflows/release.yml`) runs `go vet` + tests, then builds and pushes
 on every push to `main` (tag `latest`) and on every `v*` git tag (semver tags
-`{{version}}` and `{{major}}.{{minor}}`, plus a `sha` tag). `ADMIN_PASSWORD` and
-`APP_URL` are supplied at runtime and are never baked into the image.
+`{{version}}` and `{{major}}.{{minor}}`, plus a `sha` tag). `APP_URL` is supplied
+at runtime; the admin password is set on first run and never baked into the image.
 
 Run the published image:
 
 ```sh
 docker run -d -p 8080:8080 \
   -v paperplane-data:/data \
-  -e ADMIN_PASSWORD=change-me \
   -e APP_URL=https://example.com \
   ghcr.io/kalfian/paper-plane
 ```
@@ -109,21 +110,22 @@ Or build locally:
 
 ```sh
 docker build -t paper-plane .
-docker run -d -p 8080:8080 -v paperplane-data:/data \
-  -e ADMIN_PASSWORD=change-me paper-plane
+docker run -d -p 8080:8080 -v paperplane-data:/data paper-plane
 ```
+
+After the container is up, open `/_app/setup` to choose the admin password.
 
 ### Docker Compose (recommended)
 
 The repo ships a [`docker-compose.yml`](docker-compose.yml). It reads your `.env`
-for `ADMIN_PASSWORD`/`APP_URL`/`PORT` and persists data in a named volume:
+for the optional `APP_URL`/`PORT` and persists data in a named volume:
 
 ```sh
-cp .env.example .env      # set ADMIN_PASSWORD (APP_URL/PORT optional)
 docker compose up -d
 ```
 
-Then open <http://localhost:8080/_app/login>. Common operations:
+Then open <http://localhost:8080/_app/setup> to set your admin password (first
+run), and <http://localhost:8080/_app/login> thereafter. Common operations:
 
 ```sh
 docker compose logs -f    # follow logs
@@ -194,7 +196,7 @@ paper-plane/
 ## Development
 
 ```sh
-make run     # go run ./cmd/paperplane  (needs ADMIN_PASSWORD in env)
+make run     # go run ./cmd/paperplane  (loads .env; set password at /_app/setup)
 make test    # go test ./... -race -cover
 make vet     # go vet ./...
 make build   # CGO_ENABLED=0 build → ./bin/paperplane
@@ -211,8 +213,9 @@ embedded templates and static assets.
 
 ## Security notes
 
-- **Password** — stored as a bcrypt hash; the plaintext is only read once at
-  bootstrap and never persisted.
+- **Password** — chosen on first run (`/_app/setup`) and stored as a bcrypt
+  hash; the plaintext is never persisted and never passed through the
+  environment. Change it later via Settings → Change password.
 - **Sessions** — stateless, HMAC-SHA256-signed cookies (`HttpOnly`,
   `SameSite=Lax`, 7-day TTL); marked `Secure` when `APP_URL` is HTTPS.
 - **CSRF** — every mutating request (`POST`) requires a valid signed CSRF token.

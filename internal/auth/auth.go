@@ -208,25 +208,14 @@ func (m *Manager) sign(msg []byte) []byte {
 	return h.Sum(nil)
 }
 
-// Bootstrap ensures the instance's auth-related settings exist:
-//   - admin_password_hash: bcrypt hash of adminPassword, set only if absent so
-//     a later ADMIN_PASSWORD change via env does not silently reset it.
-//   - cookie_secret: 32 random bytes (hex), generated once if absent.
+// Bootstrap ensures the instance's cookie secret exists: 32 random bytes (hex),
+// generated once if absent. It is idempotent and safe to call on every startup.
 //
-// It is idempotent and safe to call on every startup.
-func Bootstrap(ctx context.Context, s store.Store, adminPassword string) error {
-	if _, err := s.GetSetting(ctx, store.SettingAdminPasswordHash); errors.Is(err, store.ErrNotFound) {
-		hash, herr := HashPassword(adminPassword)
-		if herr != nil {
-			return fmt.Errorf("hash admin password: %w", herr)
-		}
-		if serr := s.SetSetting(ctx, store.SettingAdminPasswordHash, hash); serr != nil {
-			return serr
-		}
-	} else if err != nil {
-		return err
-	}
-
+// The admin password is deliberately NOT set here. On a fresh instance there is
+// no password hash; the first-run setup flow (POST /_app/setup) prompts the
+// operator to choose one and persists it via SetAdminPassword. Use
+// PasswordConfigured to tell whether that has happened yet.
+func Bootstrap(ctx context.Context, s store.Store) error {
 	if _, err := s.GetSetting(ctx, store.SettingCookieSecret); errors.Is(err, store.ErrNotFound) {
 		secret := make([]byte, 32)
 		if _, rerr := rand.Read(secret); rerr != nil {
@@ -240,6 +229,19 @@ func Bootstrap(ctx context.Context, s store.Store, adminPassword string) error {
 	}
 
 	return nil
+}
+
+// PasswordConfigured reports whether an admin password hash has been set yet
+// (i.e. first-run setup is complete). A missing hash is not an error: it means
+// the instance is fresh and the setup flow should run.
+func PasswordConfigured(ctx context.Context, s store.Store) (bool, error) {
+	if _, err := s.GetSetting(ctx, store.SettingAdminPasswordHash); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // CookieSecret loads and decodes the instance cookie secret produced by
@@ -259,4 +261,16 @@ func CookieSecret(ctx context.Context, s store.Store) ([]byte, error) {
 // AdminPasswordHash loads the stored bcrypt hash of the admin password.
 func AdminPasswordHash(ctx context.Context, s store.Store) (string, error) {
 	return s.GetSetting(ctx, store.SettingAdminPasswordHash)
+}
+
+// SetAdminPassword hashes plain and stores it as the admin password hash,
+// overwriting any existing value. Unlike Bootstrap (which sets the hash only if
+// absent), this is the explicit password-rotation path used by the settings
+// page. It does not touch the cookie secret, so existing sessions stay valid.
+func SetAdminPassword(ctx context.Context, s store.Store, plain string) error {
+	hash, err := HashPassword(plain)
+	if err != nil {
+		return fmt.Errorf("hash admin password: %w", err)
+	}
+	return s.SetSetting(ctx, store.SettingAdminPasswordHash, hash)
 }

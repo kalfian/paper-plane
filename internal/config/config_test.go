@@ -1,22 +1,12 @@
 package config
 
 import (
-	"errors"
 	"path/filepath"
 	"testing"
 )
 
-func TestLoadMissingAdminPassword(t *testing.T) {
-	t.Setenv("ADMIN_PASSWORD", "")
-	t.Setenv("DATA_DIR", t.TempDir())
-	if _, err := Load(); !errors.Is(err, ErrMissingAdminPassword) {
-		t.Fatalf("Load err = %v, want ErrMissingAdminPassword", err)
-	}
-}
-
 func TestLoadDefaultsAndTrim(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "data")
-	t.Setenv("ADMIN_PASSWORD", "pw")
 	t.Setenv("DATA_DIR", dir)
 	t.Setenv("APP_URL", "https://example.com/")
 	t.Setenv("PORT", "")
@@ -40,16 +30,12 @@ func TestLoadDefaultsAndTrim(t *testing.T) {
 	}
 }
 
-func TestLoadDefaultDataDir(t *testing.T) {
-	// When DATA_DIR is unset, the default is "/data"; we only assert the value,
-	// not creation (which may require root), by pointing at a writable temp dir.
-	t.Setenv("ADMIN_PASSWORD", "pw")
+// TestLoadNoAdminPasswordRequired verifies Load no longer depends on any admin
+// password variable: a fresh instance configures its password interactively via
+// the first-run setup flow, not the environment.
+func TestLoadNoAdminPasswordRequired(t *testing.T) {
 	t.Setenv("DATA_DIR", filepath.Join(t.TempDir(), "d"))
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.AdminPassword != "pw" {
-		t.Errorf("AdminPassword = %q, want pw", cfg.AdminPassword)
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load without ADMIN_PASSWORD: %v", err)
 	}
 }

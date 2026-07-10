@@ -1,12 +1,13 @@
 # Paper Plane — Docker Compose
 #
 # Quick start:
-#   cp .env.example .env      # then set ADMIN_PASSWORD
 #   docker compose up -d
+#   # then open http://localhost:8080/_app/setup to choose your admin password
 #
 # Compose auto-reads .env in this directory for the ${...} substitutions below.
-# Only ADMIN_PASSWORD, APP_URL and PORT are consumed here; DATA_DIR is left at
-# the image default (/data) so it always matches the mounted volume.
+# All of these are optional; there is no admin-password variable — the password
+# is set on first run via /_app/setup. DATA_DIR is left at the image default
+# (/data) so it always matches the mounted volume.
 
 services:
   paperplane:
@@ -18,8 +19,6 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     environment:
-      # Required. Read once at first bootstrap to derive the bcrypt hash.
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       # Optional. Public base URL; set to your https:// URL behind a proxy so
       # session cookies are marked Secure.
       APP_URL: ${APP_URL:-}

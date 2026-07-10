@@ -24,8 +24,8 @@ import (
 func main() {
 	// healthcheck subcommand: probe the local server's health endpoint and
 	// exit 0/1 accordingly. Used by the Docker HEALTHCHECK because the
-	// distroless runtime image has no shell or curl. Must run before any
-	// config loading so it works without ADMIN_PASSWORD being set.
+	// distroless runtime image has no shell or curl. Handled before any config
+	// loading so the probe stays a cheap, dependency-free HTTP GET.
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(healthcheck())
 	}

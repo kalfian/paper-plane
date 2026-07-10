@@ -34,7 +34,7 @@ func New(ctx context.Context, cfg config.Config, st store.Store, fs sitefs.FileS
 		log = slog.Default()
 	}
 
-	if err := auth.Bootstrap(ctx, st, cfg.AdminPassword); err != nil {
+	if err := auth.Bootstrap(ctx, st); err != nil {
 		return nil, err
 	}
 	secret, err := auth.CookieSecret(ctx, st)
@@ -74,11 +74,20 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /_app/static/", cacheStatic(http.StripPrefix("/_app/", http.FileServerFS(web.Static))))
 	mux.Handle("POST /_app/login", s.csrf(http.HandlerFunc(s.handleLoginSubmit)))
 
+	// First-run setup (public, pre-auth): choose the initial admin password.
+	// Both handlers self-guard, redirecting to login once a password exists.
+	mux.HandleFunc("GET /_app/setup", s.handleSetupForm)
+	mux.Handle("POST /_app/setup", s.csrf(http.HandlerFunc(s.handleSetupSubmit)))
+
 	// Authenticated admin pages (GET) and mutations (POST + CSRF).
 	get := func(h http.HandlerFunc) http.Handler { return chain(h, s.requireAuth) }
 	post := func(h http.HandlerFunc) http.Handler { return chain(h, s.requireAuth, s.csrf) }
 
 	mux.Handle("POST /_app/logout", post(s.handleLogout))
+
+	// Account settings.
+	mux.Handle("GET /_app/settings", get(s.handleSettings))
+	mux.Handle("POST /_app/settings/password", post(s.handleChangePassword))
 
 	// Project management.
 	mux.Handle("GET /_app/{$}", get(s.handleProjectsList))
@@ -128,8 +137,19 @@ func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
-// handleLoginForm renders the login page with a fresh CSRF token.
-func (s *Server) handleLoginForm(w http.ResponseWriter, _ *http.Request) {
+// handleLoginForm renders the login page with a fresh CSRF token. On a fresh
+// instance (no password configured yet) it redirects to first-run setup.
+func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
+	configured, err := auth.PasswordConfigured(r.Context(), s.store)
+	if err != nil {
+		s.log.Error("check password configured", slog.Any("error", err))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !configured {
+		http.Redirect(w, r, setupPath, http.StatusSeeOther)
+		return
+	}
 	s.rd.render(w, http.StatusOK, "login.html", loginData{
 		CSRFToken: s.auth.IssueCSRFToken(),
 	})
@@ -140,6 +160,17 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, _ *http.Request) {
 // an error (HTTP 200) and a fresh CSRF token.
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
+
+	configured, err := auth.PasswordConfigured(r.Context(), s.store)
+	if err != nil {
+		s.log.Error("check password configured", slog.Any("error", err))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !configured {
+		http.Redirect(w, r, setupPath, http.StatusSeeOther)
+		return
+	}
 
 	hash, err := auth.AdminPasswordHash(r.Context(), s.store)
 	if err != nil {

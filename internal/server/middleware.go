@@ -11,6 +11,10 @@ import (
 // loginPath is where unauthenticated users are sent.
 const loginPath = "/_app/login"
 
+// setupPath is the first-run password-setup page, used before any admin
+// password has been configured.
+const setupPath = "/_app/setup"
+
 // csrfFormField is the form field / header the CSRF token is read from.
 const (
 	csrfFormField = "csrf_token"

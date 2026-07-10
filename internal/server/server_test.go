@@ -18,9 +18,20 @@ import (
 
 const testAdminPassword = "s3cret-pass"
 
-// newTestServer builds a Server backed by a temp-file SQLite store, bootstrapped
-// with a known admin password.
+// newTestServer builds a Server backed by a temp-file SQLite store with the
+// admin password already configured (i.e. first-run setup is complete).
 func newTestServer(t *testing.T) (*Server, http.Handler) {
+	t.Helper()
+	srv, h := newFreshServer(t)
+	if err := auth.SetAdminPassword(context.Background(), srv.store, testAdminPassword); err != nil {
+		t.Fatalf("SetAdminPassword: %v", err)
+	}
+	return srv, h
+}
+
+// newFreshServer builds a Server on an empty store with NO admin password set,
+// modelling a brand-new instance before first-run setup.
+func newFreshServer(t *testing.T) (*Server, http.Handler) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -31,7 +42,7 @@ func newTestServer(t *testing.T) (*Server, http.Handler) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	cfg := config.Config{AdminPassword: testAdminPassword, Port: "0", DataDir: dir}
+	cfg := config.Config{Port: "0", DataDir: dir}
 	srv, err := New(ctx, cfg, st, sitefs.New(dir), nil)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
