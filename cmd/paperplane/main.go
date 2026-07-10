@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/kalfian/paper-plane/internal/config"
 	"github.com/kalfian/paper-plane/internal/server"
 	"github.com/kalfian/paper-plane/internal/sitefs"
@@ -61,6 +62,13 @@ func healthcheck() int {
 // run performs startup wiring and blocks until shutdown, returning any fatal
 // error. Splitting this out of main keeps error handling in one place.
 func run(log *slog.Logger) error {
+	// Best-effort load of a local .env for development convenience. Missing file
+	// is not an error: production supplies real environment variables directly.
+	// Load never overrides variables already set in the environment.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Warn("could not load .env", slog.Any("error", err))
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
