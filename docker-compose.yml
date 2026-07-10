@@ -1,0 +1,34 @@
+# Paper Plane — Docker Compose
+#
+# Quick start:
+#   cp .env.example .env      # then set ADMIN_PASSWORD
+#   docker compose up -d
+#
+# Compose auto-reads .env in this directory for the ${...} substitutions below.
+# Only ADMIN_PASSWORD, APP_URL and PORT are consumed here; DATA_DIR is left at
+# the image default (/data) so it always matches the mounted volume.
+
+services:
+  paperplane:
+    image: ghcr.io/kalfian/paper-plane:latest
+    # To build from source instead of pulling the published image, comment out
+    # the `image:` line above and uncomment the next one:
+    # build: .
+    container_name: paperplane
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      # Required. Read once at first bootstrap to derive the bcrypt hash.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      # Optional. Public base URL; set to your https:// URL behind a proxy so
+      # session cookies are marked Secure.
+      APP_URL: ${APP_URL:-}
+    volumes:
+      # Persists paperplane.db and sites/<project-id>/ across restarts.
+      - paperplane-data:/data
+    restart: unless-stopped
+    # The image ships its own HEALTHCHECK (/paperplane healthcheck); Compose
+    # inherits it, so no healthcheck block is needed here.
+
+volumes:
+  paperplane-data:

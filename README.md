@@ -40,10 +40,8 @@ git clone https://github.com/kalfian/paper-plane.git
 cd paper-plane
 
 # Configure. ADMIN_PASSWORD is required; the rest have sensible defaults.
-cp .env.example .env
-export ADMIN_PASSWORD=change-me
-export DATA_DIR=./data          # optional; default is /data
-export APP_URL=http://localhost:8080   # optional
+# The .env is loaded automatically at startup (no need to export by hand).
+cp .env.example .env            # then edit ADMIN_PASSWORD
 
 make run
 ```
@@ -70,6 +68,25 @@ All configuration is via environment variables (read once at startup).
 | `DATA_DIR`       | no       | `/data` | Directory for persistent data (SQLite DB + site files). Created if missing. |
 | `PORT`           | no       | `8080`  | TCP port the HTTP server listens on.                                        |
 
+Copy-paste starting point (same as [`.env.example`](.env.example)) — save as `.env`:
+
+```sh
+# Admin password (required). Hashed with bcrypt at first bootstrap.
+ADMIN_PASSWORD=change-me
+
+# Public base URL (optional; used for absolute links + Secure cookies on https).
+APP_URL=http://localhost:8080
+
+# Directory for persistent data — SQLite DB + uploaded site files (optional).
+DATA_DIR=./data
+
+# TCP port the HTTP server listens on (optional).
+PORT=8080
+```
+
+For local `make run`, the `.env` is loaded automatically at startup. In Docker,
+leave `DATA_DIR` at the image default (`/data`) so it matches the mounted volume.
+
 ## Deploy with Docker
 
 Prebuilt images are published to `ghcr.io/kalfian/paper-plane`. CI
@@ -95,6 +112,29 @@ docker build -t paper-plane .
 docker run -d -p 8080:8080 -v paperplane-data:/data \
   -e ADMIN_PASSWORD=change-me paper-plane
 ```
+
+### Docker Compose (recommended)
+
+The repo ships a [`docker-compose.yml`](docker-compose.yml). It reads your `.env`
+for `ADMIN_PASSWORD`/`APP_URL`/`PORT` and persists data in a named volume:
+
+```sh
+cp .env.example .env      # set ADMIN_PASSWORD (APP_URL/PORT optional)
+docker compose up -d
+```
+
+Then open <http://localhost:8080/_app/login>. Common operations:
+
+```sh
+docker compose logs -f    # follow logs
+docker compose pull       # pull a newer published image
+docker compose up -d      # apply the pulled image
+docker compose down       # stop (data volume is kept)
+```
+
+To build from source instead of pulling `ghcr.io/kalfian/paper-plane`, uncomment
+the `build: .` line (and comment out `image:`) in `docker-compose.yml`, then
+`docker compose up -d --build`.
 
 Notes:
 
