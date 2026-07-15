@@ -25,6 +25,7 @@
     <h1 class="page-title">Files</h1>
     <div class="meta-line">
       <span><strong>{{.Project.FileCount}}</strong> files · <strong>{{.Project.SizeHuman}}</strong></span>
+      <span>Landing page: <code>{{.Project.IndexFile}}</code></span>
       {{if .Project.Active}}<span><span class="badge badge--active">active</span></span>
       {{else}}<span><span class="badge badge--unlinked">unlinked</span></span>{{end}}
     </div>
@@ -64,10 +65,22 @@
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <div class="field">
         <label class="label" for="files">Choose files</label>
-        <input class="file-input" type="file" id="files" name="files" multiple required
-               aria-describedby="up-hint">
-        <p class="hint" id="up-hint">Single or multiple files land at the site root.
-          A <code>.zip</code> is extracted with its folder structure preserved.</p>
+        <div class="dropzone" data-dropzone>
+          <div class="dropzone__drop">
+            <svg class="dropzone__icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 15V4m0 0L8 8m4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <p class="dropzone__text"><strong>Drag &amp; drop</strong> files here, or <span class="dropzone__link">browse</span></p>
+            <p class="dropzone__hint" id="up-hint">Drop more anytime — files add up, and you
+              can remove any before uploading. Files land at the site root; a <code>.zip</code>
+              is extracted with its folder structure preserved. A lone HTML file becomes
+              <code>index.html</code> when the site has none yet.</p>
+            <input class="dropzone__input" type="file" id="files" name="files" multiple required
+                   aria-describedby="up-hint" aria-label="Choose files to upload">
+          </div>
+          <div class="dropzone__files" data-dz-list hidden></div>
+        </div>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn--primary">Upload</button>
@@ -91,8 +104,11 @@
         </thead>
         <tbody>
           {{range .Files}}
-          <tr {{if and $.Editing (eq .Path $.EditPath)}}class="is-editing"{{end}}>
-            <td class="cell-path">{{.Path}}</td>
+          <tr {{if and $.Renaming (eq .Path $.RenamePath)}}class="is-editing"{{else if and $.Editing (eq .Path $.EditPath)}}class="is-editing"{{end}}>
+            <td class="cell-path">
+              {{.Path}}
+              {{if .IsIndex}}<span class="badge badge--index" title="Served at the site root">index</span>{{end}}
+            </td>
             <td class="num">{{.SizeHuman}}</td>
             <td>
               <div class="row-actions">
@@ -101,6 +117,19 @@
                    href="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
                    hx-get="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
                    hx-push-url="true">Edit</a>
+                {{end}}
+                <a class="btn btn--ghost btn--sm"
+                   href="/_app/projects/{{$.Project.ID}}/files/rename?path={{.Path}}"
+                   hx-get="/_app/projects/{{$.Project.ID}}/files/rename?path={{.Path}}"
+                   hx-push-url="true">Rename</a>
+                {{if and .IsHTML (not .IsIndex)}}
+                <form class="inline-form" method="POST"
+                      action="/_app/projects/{{$.Project.ID}}/files/index"
+                      hx-post="/_app/projects/{{$.Project.ID}}/files/index">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="path" value="{{.Path}}">
+                  <button type="submit" class="btn btn--ghost btn--sm">Set as index</button>
+                </form>
                 {{end}}
                 <form class="inline-form" method="POST"
                       action="/_app/projects/{{$.Project.ID}}/files/delete"
@@ -147,6 +176,32 @@
       </div>
       <div class="form-actions">
         <button type="submit" id="file-save" class="btn btn--primary">Save file</button>
+        <a class="btn btn--ghost" href="/_app/projects/{{.Project.ID}}/files"
+           hx-get="/_app/projects/{{.Project.ID}}/files" hx-push-url="true">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+
+{{if .Renaming}}
+<div class="card" id="rename">
+  <div class="card__body">
+    <h2 class="section-title">Rename <code>{{.RenamePath}}</code></h2>
+    <form method="POST" action="/_app/projects/{{.Project.ID}}/files/rename"
+          hx-post="/_app/projects/{{.Project.ID}}/files/rename">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="path" value="{{.RenamePath}}">
+      <div class="field">
+        <label class="label" for="rename-name">New file name</label>
+        <input class="input" type="text" id="rename-name" name="name" value="{{.RenamePath}}"
+               data-autofocus autocomplete="off" spellcheck="false" required
+               aria-describedby="rename-hint">
+        <p class="hint" id="rename-hint">Base name only — no slashes. If this is the
+          site's landing page, the <code>index</code> pointer follows the new name.</p>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Rename</button>
         <a class="btn btn--ghost" href="/_app/projects/{{.Project.ID}}/files"
            hx-get="/_app/projects/{{.Project.ID}}/files" hx-push-url="true">Cancel</a>
       </div>

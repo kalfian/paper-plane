@@ -184,6 +184,49 @@ func TestWriteReadListDelete(t *testing.T) {
 	}
 }
 
+func TestRename(t *testing.T) {
+	f := newTestFS(t)
+	const id = "site"
+	if err := f.CreateSite(id); err != nil {
+		t.Fatalf("CreateSite: %v", err)
+	}
+	if err := f.WriteFile(id, "old.txt", []byte("data")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Happy path.
+	if err := f.Rename(id, "old.txt", "new.txt"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if got, err := f.ReadFile(id, "new.txt"); err != nil || string(got) != "data" {
+		t.Fatalf("after rename ReadFile = %q, %v", got, err)
+	}
+	if _, err := f.ReadFile(id, "old.txt"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("old path still present: %v", err)
+	}
+
+	// Missing source.
+	if err := f.Rename(id, "ghost.txt", "x.txt"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("rename missing source err = %v, want ErrNotExist", err)
+	}
+
+	// Refuse to overwrite an existing destination.
+	if err := f.WriteFile(id, "keep.txt", []byte("keep")); err != nil {
+		t.Fatalf("WriteFile keep: %v", err)
+	}
+	if err := f.Rename(id, "new.txt", "keep.txt"); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("rename onto existing dest err = %v, want ErrExist", err)
+	}
+	if got, _ := f.ReadFile(id, "keep.txt"); string(got) != "keep" {
+		t.Fatal("destination must be untouched on a refused overwrite")
+	}
+
+	// Traversal is rejected on both sides.
+	if err := f.Rename(id, "keep.txt", "../escape.txt"); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("rename to traversal err = %v, want ErrUnsafePath", err)
+	}
+}
+
 func TestPlaceholderAndDeleteSite(t *testing.T) {
 	f := newTestFS(t)
 	const id = "ph"

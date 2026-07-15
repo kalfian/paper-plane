@@ -57,6 +57,7 @@ type projectView struct {
 	Size      int64
 	SizeHuman string
 	SiteURL   string // path to the live site, e.g. "/<slug>/"
+	IndexFile string // filename served at the site root
 	UpdatedAt time.Time
 }
 
@@ -104,6 +105,7 @@ func (s *Server) newProjectView(p model.Project) projectView {
 		Size:      size,
 		SizeHuman: humanBytes(size),
 		SiteURL:   "/" + p.Slug + "/",
+		IndexFile: p.EffectiveIndexFile(),
 		UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -183,6 +185,12 @@ func (s *Server) handleProjectCreate(w http.ResponseWriter, r *http.Request) {
 	if added == 0 {
 		if err := s.fs.WritePlaceholderIndex(p.ID); err != nil {
 			s.log.Error("write placeholder", "id", p.ID, "error", err)
+		}
+	} else if name := loneHTMLUpload(r); name != "" {
+		// A single uploaded HTML page becomes the site's landing page, kept under
+		// its own name (no rename to index.html).
+		if err := s.store.SetIndexFile(r.Context(), p.ID, name); err != nil {
+			s.log.Error("set index file", "id", p.ID, "name", name, "error", err)
 		}
 	}
 

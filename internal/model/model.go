@@ -29,6 +29,19 @@ type Project struct {
 	Name      string    // human-friendly display name
 	Slug      string    // URL path segment, unique, immutable in MVP
 	Status    Status    // active | unlinked
+	IndexFile string    // filename served at the site root (default "index.html")
 	CreatedAt time.Time // UTC
 	UpdatedAt time.Time // UTC
+}
+
+// DefaultIndexFile is the landing-page filename used when a project has none set.
+const DefaultIndexFile = "index.html"
+
+// EffectiveIndexFile returns IndexFile, falling back to DefaultIndexFile when it
+// is empty (e.g. a zero-value Project).
+func (p Project) EffectiveIndexFile() string {
+	if p.IndexFile == "" {
+		return DefaultIndexFile
+	}
+	return p.IndexFile
 }

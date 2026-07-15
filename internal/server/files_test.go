@@ -173,6 +173,84 @@ func TestCreateProjectWithZip(t *testing.T) {
 	}
 }
 
+func TestCreateProjectLoneHTMLBecomesIndex(t *testing.T) {
+	srv, h := newTestServer(t)
+	rr := authedUpload(srv, h, "/_app/projects",
+		map[string]string{"name": "About", "slug": "about"},
+		[]uploadFile{{name: "about.html", data: []byte("<head></head><p>about</p>")}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	p, err := srv.store.GetProjectBySlug(context.Background(), "about")
+	if err != nil {
+		t.Fatalf("project not created: %v", err)
+	}
+	// The file keeps its original name (no rename to index.html)...
+	got, err := srv.fs.ReadFile(p.ID, "about.html")
+	if err != nil {
+		t.Fatalf("lone HTML upload should keep its name: %v", err)
+	}
+	if !bytes.Contains(got, []byte("<p>about</p>")) {
+		t.Fatalf("about.html content unexpected: %s", got)
+	}
+	// ...and no index.html is synthesized.
+	if _, err := srv.fs.Stat(p.ID, "index.html"); !isNotExist(err) {
+		t.Fatalf("no index.html should be created for a lone non-index upload: %v", err)
+	}
+	// ...but the project's landing page points at it, so the site root serves it.
+	if p.IndexFile != "about.html" {
+		t.Fatalf("index_file = %q, want about.html", p.IndexFile)
+	}
+	rr = authedGet(srv, h, "/about/")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "<p>about</p>") {
+		t.Fatalf("site root did not serve about.html as index: %d %q", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUploadLoneHTMLKeepsNameWhenIndexExists(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	if err := srv.fs.WriteFile(id, "index.html", []byte("<p>home</p>")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// A lone HTML upload must not clobber an existing index.html; it keeps its
+	// own base name instead.
+	rr := authedUpload(srv, h, "/_app/projects/"+id+"/files", nil,
+		[]uploadFile{{name: "about.html", data: []byte("<p>about</p>")}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("upload status = %d", rr.Code)
+	}
+	if got, err := srv.fs.ReadFile(id, "index.html"); err != nil || string(got) != "<p>home</p>" {
+		t.Fatalf("index.html should be untouched, got %q, %v", got, err)
+	}
+	if _, err := srv.fs.Stat(id, "about.html"); err != nil {
+		t.Fatalf("about.html should be stored under its own name: %v", err)
+	}
+}
+
+func TestUploadMultipleHTMLKeepNames(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	// Two HTML files: neither should be renamed to index.html (the rule targets
+	// a single lone HTML upload only).
+	rr := authedUpload(srv, h, "/_app/projects/"+id+"/files", nil,
+		[]uploadFile{
+			{name: "about.html", data: []byte("<p>about</p>")},
+			{name: "contact.html", data: []byte("<p>contact</p>")},
+		})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("upload status = %d", rr.Code)
+	}
+	for _, name := range []string{"about.html", "contact.html"} {
+		if _, err := srv.fs.Stat(id, name); err != nil {
+			t.Fatalf("%s should be stored under its own name: %v", name, err)
+		}
+	}
+	if _, err := srv.fs.Stat(id, "index.html"); !isNotExist(err) {
+		t.Fatal("multi-file HTML upload must not synthesize an index.html")
+	}
+}
+
 // --- unlink / relink / delete ---
 
 func TestUnlinkRelink(t *testing.T) {
@@ -317,6 +395,104 @@ func TestFileUploadAndDelete(t *testing.T) {
 	}
 	if _, err := srv.fs.Stat(id, "notes.txt"); !isNotExist(err) {
 		t.Fatal("file still present after delete")
+	}
+}
+
+func TestFileRename(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	if err := srv.fs.WriteFile(id, "old.txt", []byte("hi")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	rr := authedForm(srv, h, http.MethodPost, "/_app/projects/"+id+"/files/rename",
+		url.Values{"path": {"old.txt"}, "name": {"new.txt"}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("rename status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	if got, err := srv.fs.ReadFile(id, "new.txt"); err != nil || string(got) != "hi" {
+		t.Fatalf("renamed file = %q, %v", got, err)
+	}
+	if _, err := srv.fs.Stat(id, "old.txt"); !isNotExist(err) {
+		t.Fatal("old name should be gone after rename")
+	}
+}
+
+func TestFileRenameUpdatesIndexPointer(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	if err := srv.fs.WriteFile(id, "about.html", []byte("<p>a</p>")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := srv.store.SetIndexFile(context.Background(), id, "about.html"); err != nil {
+		t.Fatalf("SetIndexFile: %v", err)
+	}
+	rr := authedForm(srv, h, http.MethodPost, "/_app/projects/"+id+"/files/rename",
+		url.Values{"path": {"about.html"}, "name": {"home.html"}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("rename status = %d", rr.Code)
+	}
+	p, _ := srv.store.GetProject(context.Background(), id)
+	if p.IndexFile != "home.html" {
+		t.Fatalf("index_file = %q, want home.html (should follow the rename)", p.IndexFile)
+	}
+}
+
+func TestFileRenameRejectsDuplicate(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	_ = srv.fs.WriteFile(id, "a.txt", []byte("a"))
+	_ = srv.fs.WriteFile(id, "b.txt", []byte("b"))
+	rr := authedForm(srv, h, http.MethodPost, "/_app/projects/"+id+"/files/rename",
+		url.Values{"path": {"a.txt"}, "name": {"b.txt"}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("dup rename status = %d", rr.Code)
+	}
+	if !strings.Contains(rr.Header().Get("Location"), "already+exists") {
+		t.Fatalf("expected duplicate-name error redirect; Location = %q", rr.Header().Get("Location"))
+	}
+	// Both files remain intact.
+	if got, _ := srv.fs.ReadFile(id, "a.txt"); string(got) != "a" {
+		t.Fatal("a.txt should be untouched after a failed rename")
+	}
+}
+
+func TestFileRenameRejectsSlash(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	_ = srv.fs.WriteFile(id, "a.txt", []byte("a"))
+	rr := authedForm(srv, h, http.MethodPost, "/_app/projects/"+id+"/files/rename",
+		url.Values{"path": {"a.txt"}, "name": {"sub/evil.txt"}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("slash rename status = %d", rr.Code)
+	}
+	if _, err := srv.fs.Stat(id, "sub/evil.txt"); !isNotExist(err) {
+		t.Fatal("rename with a slash must be rejected")
+	}
+}
+
+func TestFileSetIndex(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	_ = srv.fs.WriteFile(id, "landing.html", []byte("<p>L</p>"))
+	rr := authedForm(srv, h, http.MethodPost, "/_app/projects/"+id+"/files/index",
+		url.Values{"path": {"landing.html"}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("set-index status = %d", rr.Code)
+	}
+	p, _ := srv.store.GetProject(context.Background(), id)
+	if p.IndexFile != "landing.html" {
+		t.Fatalf("index_file = %q, want landing.html", p.IndexFile)
+	}
+}
+
+func TestFileSetIndexMissingFile(t *testing.T) {
+	srv, h := newTestServer(t)
+	id := seedProject(t, srv, "demo", model.StatusActive)
+	rr := authedForm(srv, h, http.MethodPost, "/_app/projects/"+id+"/files/index",
+		url.Values{"path": {"nope.html"}})
+	if rr.Code != http.StatusSeeOther || !strings.Contains(rr.Header().Get("Location"), "not+found") {
+		t.Fatalf("set-index on missing file should redirect with error; got %d %q",
+			rr.Code, rr.Header().Get("Location"))
 	}
 }
 

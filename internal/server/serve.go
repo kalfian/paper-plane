@@ -55,6 +55,10 @@ func (s *Server) handleServeSite(w http.ResponseWriter, r *http.Request) {
 // default index, directory-trailing-slash redirect, content type, cache
 // headers, and (for the root index.html) <base> injection.
 func (s *Server) serveSiteFile(w http.ResponseWriter, r *http.Request, proj *model.Project, relpath string) {
+	// The site root's directory index is the project's configured landing page
+	// (default index.html); subdirectories still use index.html.
+	rootRequest := relpath == "" || relpath == "."
+
 	info, err := s.fs.Stat(proj.ID, relpath)
 	if err != nil {
 		s.notFoundOrError(w, r, err)
@@ -71,7 +75,11 @@ func (s *Server) serveSiteFile(w http.ResponseWriter, r *http.Request, proj *mod
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 			return
 		}
-		relpath = path.Join(relpath, "index.html")
+		indexName := "index.html"
+		if rootRequest {
+			indexName = proj.EffectiveIndexFile()
+		}
+		relpath = path.Join(relpath, indexName)
 		info, err = s.fs.Stat(proj.ID, relpath)
 		if err != nil {
 			s.notFoundOrError(w, r, err)
@@ -89,8 +97,10 @@ func (s *Server) serveSiteFile(w http.ResponseWriter, r *http.Request, proj *mod
 		return
 	}
 
-	// Inject <base> only into the site's root index.html.
-	if relpath == "index.html" {
+	// Inject <base> into the site's root landing page (the configured index file
+	// served at the root, whatever its name). Root-level files only: a nested
+	// path (e.g. "sub/index.html") is never the site's landing page.
+	if relpath == proj.EffectiveIndexFile() && !strings.Contains(relpath, "/") {
 		data = injectBase(data, proj.Slug)
 	}
 

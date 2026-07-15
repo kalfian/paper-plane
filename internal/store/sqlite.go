@@ -64,14 +64,17 @@ func (s *SQLite) CreateProject(ctx context.Context, p *model.Project) error {
 	if p.Status == "" {
 		p.Status = model.StatusActive
 	}
+	if p.IndexFile == "" {
+		p.IndexFile = model.DefaultIndexFile
+	}
 	now := s.now().UTC()
 	p.CreatedAt = now
 	p.UpdatedAt = now
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (id, name, slug, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		p.ID, p.Name, p.Slug, string(p.Status),
+		`INSERT INTO projects (id, name, slug, status, index_file, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.Slug, string(p.Status), p.IndexFile,
 		now.Format(timeLayout), now.Format(timeLayout),
 	)
 	if err != nil {
@@ -129,6 +132,22 @@ func (s *SQLite) UpdateProject(ctx context.Context, p *model.Project) error {
 	return nil
 }
 
+// SetIndexFile updates the project's landing-page filename and bumps
+// updated_at. Returns ErrNotFound if the project is missing.
+func (s *SQLite) SetIndexFile(ctx context.Context, id, filename string) error {
+	if filename == "" {
+		filename = model.DefaultIndexFile
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects SET index_file = ?, updated_at = ? WHERE id = ?`,
+		filename, s.now().UTC().Format(timeLayout), id,
+	)
+	if err != nil {
+		return err
+	}
+	return requireOneRow(res)
+}
+
 // SetStatus updates the project status and bumps updated_at.
 func (s *SQLite) SetStatus(ctx context.Context, id string, status model.Status) error {
 	if !status.Valid() {
@@ -176,7 +195,7 @@ func (s *SQLite) SetSetting(ctx context.Context, key, value string) error {
 	return err
 }
 
-const selectProject = `SELECT id, name, slug, status, created_at, updated_at FROM projects`
+const selectProject = `SELECT id, name, slug, status, index_file, created_at, updated_at FROM projects`
 
 // rowScanner is satisfied by both *sql.Row and *sql.Rows.
 type rowScanner interface {
@@ -199,10 +218,13 @@ func scanProject(sc rowScanner) (*model.Project, error) {
 		status             string
 		createdStr, updStr string
 	)
-	if err := sc.Scan(&p.ID, &p.Name, &p.Slug, &status, &createdStr, &updStr); err != nil {
+	if err := sc.Scan(&p.ID, &p.Name, &p.Slug, &status, &p.IndexFile, &createdStr, &updStr); err != nil {
 		return nil, err
 	}
 	p.Status = model.Status(status)
+	if p.IndexFile == "" {
+		p.IndexFile = model.DefaultIndexFile
+	}
 
 	var err error
 	if p.CreatedAt, err = time.Parse(timeLayout, createdStr); err != nil {

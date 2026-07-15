@@ -68,6 +68,11 @@ type FileStore interface {
 	WriteFile(id, relpath string, data []byte) error
 	// DeleteFile removes the file at relpath within the site.
 	DeleteFile(id, relpath string) error
+	// Rename moves the file at oldRel to newRel within the site, creating parent
+	// directories as needed. Both paths are validated against traversal. It
+	// returns fs.ErrNotExist if the source is missing and os.ErrExist if the
+	// destination already exists (renames never overwrite).
+	Rename(id, oldRel, newRel string) error
 	// SiteSize returns the total size in bytes of all files under the site.
 	SiteSize(id string) (int64, error)
 	// Stat returns file info for relpath within the site, or fs.ErrNotExist.
@@ -259,6 +264,36 @@ func (f *FS) DeleteFile(id, relpath string) error {
 		return err
 	}
 	return os.Remove(full)
+}
+
+// Rename moves oldRel to newRel within the site. Both are validated against the
+// site root and rejected if they resolve to the root itself. Parent directories
+// for the destination are created. It refuses to overwrite an existing
+// destination (os.ErrExist) and reports a missing source as fs.ErrNotExist.
+func (f *FS) Rename(id, oldRel, newRel string) error {
+	src, err := f.resolveFile(id, oldRel)
+	if err != nil {
+		return err
+	}
+	dst, err := f.resolveFile(id, newRel)
+	if err != nil {
+		return err
+	}
+	if src == dst {
+		return nil
+	}
+	if _, err := os.Stat(src); err != nil {
+		return err // fs.ErrNotExist when the source is missing
+	}
+	if _, err := os.Stat(dst); err == nil {
+		return os.ErrExist
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(src, dst)
 }
 
 // SiteSize sums the sizes of all files under the site.

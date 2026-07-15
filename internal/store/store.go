@@ -44,6 +44,9 @@ type Store interface {
 	UpdateProject(ctx context.Context, p *model.Project) error
 	// SetStatus sets the project status. Returns ErrNotFound if missing.
 	SetStatus(ctx context.Context, id string, status model.Status) error
+	// SetIndexFile sets the project's landing-page filename (served at the site
+	// root). An empty filename resets it to the default. ErrNotFound if missing.
+	SetIndexFile(ctx context.Context, id, filename string) error
 	// DeleteProject removes the project row. Returns ErrNotFound if missing.
 	DeleteProject(ctx context.Context, id string) error
 

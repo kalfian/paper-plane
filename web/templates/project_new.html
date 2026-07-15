@@ -44,19 +44,32 @@
       <div class="field">
         <label class="label" for="slug">Slug</label>
         <input class="input" type="text" id="slug" name="slug" value="{{.Slug}}"
-               placeholder="marketing-site" pattern="[a-z0-9][a-z0-9-]*" maxlength="63"
+               placeholder="marketing-site" pattern="[a-z0-9][a-z0-9\-]*" maxlength="63"
                required autocomplete="off" aria-describedby="slug-hint">
         <p class="hint" id="slug-hint">Lowercase letters, digits, and hyphens; must
           start with a letter or digit. Served at <code>/&lt;slug&gt;/</code>. Immutable after creation.</p>
+        <button type="button" class="btn btn--ghost btn--sm autofill-btn" data-autofill-btn hidden></button>
       </div>
 
       <div class="field">
         <label class="label" for="files">Files <span class="muted">(optional)</span></label>
-        <input class="file-input" type="file" id="files" name="files" multiple
-               aria-describedby="files-hint">
-        <p class="hint" id="files-hint">Select one or more files, or a single
-          <code>.zip</code> — it will be extracted, preserving its folder structure.
-          If you skip this, a placeholder <code>index.html</code> is created.</p>
+        <div class="dropzone" data-dropzone data-autofill>
+          <div class="dropzone__drop">
+            <svg class="dropzone__icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 15V4m0 0L8 8m4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <p class="dropzone__text"><strong>Drag &amp; drop</strong> files here, or <span class="dropzone__link">browse</span></p>
+            <p class="dropzone__hint" id="files-hint">Drop more anytime — files add up, and
+              you can remove any before creating. A single <code>.zip</code> is extracted
+              with its folder structure. A lone HTML file becomes the site's
+              <code>index.html</code>; use the button under Slug to copy its name into
+              Name &amp; Slug. Skip this and a placeholder <code>index.html</code> is created.</p>
+            <input class="dropzone__input" type="file" id="files" name="files" multiple
+                   aria-describedby="files-hint" aria-label="Choose files to upload">
+          </div>
+          <div class="dropzone__files" data-dz-list hidden></div>
+        </div>
       </div>
 
       <div class="form-actions">

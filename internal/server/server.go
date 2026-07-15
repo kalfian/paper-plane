@@ -106,6 +106,9 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /_app/projects/{id}/files/edit", get(s.handleFileEdit))
 	mux.Handle("POST /_app/projects/{id}/files/save", post(s.handleFileSave))
 	mux.Handle("POST /_app/projects/{id}/files/delete", post(s.handleFileDelete))
+	mux.Handle("GET /_app/projects/{id}/files/rename", get(s.handleFileRenameForm))
+	mux.Handle("POST /_app/projects/{id}/files/rename", post(s.handleFileRename))
+	mux.Handle("POST /_app/projects/{id}/files/index", post(s.handleFileSetIndex))
 
 	// Any other /_app/* GET is an unknown admin path → 404 (still auth-gated),
 	// so it is never mistaken for a site slug by the root handler below.
@@ -120,12 +123,16 @@ func (s *Server) Routes() http.Handler {
 	return chain(mux, s.recoverPanic, s.logging, s.secureHeaders)
 }
 
-// cacheStatic sets a short shared cache TTL on embedded admin assets. They are
-// versioned by the binary, so a modest TTL avoids re-fetching CSS/JS on every
-// navigation without risking stale assets across deploys.
+// cacheStatic tells browsers to revalidate embedded admin assets before use.
+// The asset URLs carry no content hash, so a fixed max-age would serve stale
+// CSS/JS after an in-place update (until the TTL expired) — a real foot-gun that
+// forced users to hard-refresh. "no-cache" still lets the browser cache the
+// bytes, but it must revalidate via ETag/Last-Modified (http.FileServerFS sets
+// both), so an unchanged asset costs a cheap 304 and a changed one is fetched
+// immediately. No hard refresh required.
 func cacheStatic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("Cache-Control", "no-cache")
 		next.ServeHTTP(w, r)
 	})
 }

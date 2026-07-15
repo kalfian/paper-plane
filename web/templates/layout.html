@@ -14,11 +14,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark light">
   <meta name="csrf-token" content="{{.CSRFToken}}">
   <title>{{block "title" .}}Paper Plane{{end}}</title>
   <link rel="stylesheet" href="/_app/static/app.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%230369a1' d='M15 1 1 7l4 2 2 4z'/></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%23288dcc' d='M15 1 1 7l4 2 2 4z'/></svg>">
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'
       hx-target="#app-main" hx-select="#app-main" hx-swap="outerHTML">
@@ -54,6 +54,7 @@
   </footer>
 
   <script src="/_app/static/vendor/htmx.min.js" defer></script>
+  <script src="/_app/static/app.js" defer></script>
   <script>
     // Keyboard-focus continuity across htmx swaps. The body swaps #app-main via
     // outerHTML, which normally drops focus to <body>. After each settle:

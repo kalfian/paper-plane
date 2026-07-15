@@ -10,9 +10,9 @@
   - Type:    6-step scale, 14px base (dense admin reading), one family stack.
   - Radius:  one language — 4/6/10px.
   - Shadow:  two elevations, both subtle.
-  - Color:   neutral "ink on paper" palette + ONE accent (sky blue — thematic
-             for Paper Plane, not a decorative gradient). Semantic roles only.
-  - Theme:   light by default, dark via prefers-color-scheme (token overrides).
+  - Color:   true-black neutral palette + ONE accent (Kalfian brand ocean blue
+             #288DCC / interactive #1A6FA8). Semantic roles only.
+  - Theme:   dark by default (true black), light via prefers-color-scheme.
 */
 
 :root {
@@ -49,76 +49,91 @@
   --radius: 6px;
   --radius-lg: 10px;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06),
-    0 1px 3px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08),
-    0 2px 4px rgba(15, 23, 42, 0.04);
+  /* Elevation — dark-first (deeper shadows read on true black) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.4);
 
-  /* Neutral palette — ink on paper */
-  --paper: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --border: #dfe3e8;
-  --border-strong: #c7ccd4;
-  --text: #1a2230;
-  --text-muted: #5b6472;
-  --text-faint: #8a93a1;
+  /* Neutral palette — true black, ink #F5F5F7 (Kalfian brand, dark-first).
+     The light palette is a graceful override below (prefers-color-scheme: light). */
+  --paper: #080808;
+  --surface: #111214;
+  --surface-2: #1a1c1f;
+  --border: #26282d;
+  --border-strong: #3a3d44;
+  --text: #f5f5f7;
+  --text-muted: #a2a6ae;
+  --text-faint: #6f737b;
 
-  /* Accent — sky blue (thematic: Paper Plane flies) */
-  --accent: #0369a1;
-  --accent-hover: #075985;
-  --accent-active: #0c4a6e;
-  --accent-fg: #ffffff;
-  --accent-soft: #e0f2fe;
-  --accent-soft-fg: #075985;
+  /* Accent — Kalfian ocean blue (kalfian.com). Bright #4BACD6 stays legible on
+     true black for both link text and button fill (with dark --accent-fg); the
+     hero hue #288DCC drives the focus ring, logo mark, and favicon. */
+  --accent: #4bacd6;
+  --accent-hover: #6fc0e2;
+  --accent-active: #93d1ea;
+  --accent-fg: #08131b;
+  --accent-soft: #0f2a3a;
+  --accent-soft-fg: #8ccfe9;
+  --brand-hero: #288dcc;
+  /* Primary button fill — the brand's deep ocean blue with white text (its
+     actual button style), kept distinct from the bright link accent above. */
+  --btn-primary-bg: #1a6fa8;
+  --btn-primary-hover: #2280bd;
+  --btn-primary-active: #145881;
+  --btn-primary-fg: #ffffff;
 
-  /* Semantic status */
-  --success: #15803d;
-  --success-soft: #dcfce7;
-  --success-fg: #166534;
-  --danger: #b91c1c;
-  --danger-hover: #991b1b;
-  --danger-soft: #fee2e2;
-  --danger-fg: #991b1b;
-  --warning-soft: #fef3c7;
-  --warning-fg: #92400e;
+  /* Semantic status (dark) */
+  --success: #4ade80;
+  --success-soft: #14331f;
+  --success-fg: #86efac;
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-soft: #3a1717;
+  --danger-fg: #fca5a5;
+  --warning-soft: #3a2f12;
+  --warning-fg: #fcd34d;
 
-  --focus-ring: 0 0 0 3px rgba(3, 105, 161, 0.35);
+  --focus-ring: 0 0 0 3px rgba(40, 141, 204, 0.5);
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
 
-    --paper: #0e1420;
-    --surface: #161d2b;
-    --surface-2: #1e2636;
-    --border: #2b3446;
-    --border-strong: #3a4457;
-    --text: #e7ebf1;
-    --text-muted: #a3adbd;
-    --text-faint: #6c7688;
+    --paper: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f2f5;
+    --border: #dfe3e8;
+    --border-strong: #c7ccd4;
+    --text: #1a2230;
+    --text-muted: #5b6472;
+    --text-faint: #8a93a1;
 
-    --accent: #38bdf8;
-    --accent-hover: #7dd3fc;
-    --accent-active: #bae6fd;
-    --accent-fg: #062338;
-    --accent-soft: #0b2b40;
-    --accent-soft-fg: #7dd3fc;
+    /* Interactive accent uses the dark brand variant #1A6FA8 (~5.3:1 with white
+       text); bare hero #288DCC is only ~3.6:1 and stays for the focus ring. */
+    --accent: #1a6fa8;
+    --accent-hover: #156091;
+    --accent-active: #104d74;
+    --accent-fg: #ffffff;
+    --accent-soft: #e4f1fb;
+    --accent-soft-fg: #1a6fa8;
+    --brand-hero: #288dcc;
+    --btn-primary-bg: #1a6fa8;
+    --btn-primary-hover: #156091;
+    --btn-primary-active: #104d74;
+    --btn-primary-fg: #ffffff;
 
-    --success: #4ade80;
-    --success-soft: #14331f;
-    --success-fg: #86efac;
-    --danger: #f87171;
-    --danger-hover: #fca5a5;
-    --danger-soft: #3a1717;
-    --danger-fg: #fca5a5;
-    --warning-soft: #3a2f12;
-    --warning-fg: #fcd34d;
+    --success: #15803d;
+    --success-soft: #dcfce7;
+    --success-fg: #166534;
+    --danger: #b91c1c;
+    --danger-hover: #991b1b;
+    --danger-soft: #fee2e2;
+    --danger-fg: #991b1b;
+    --warning-soft: #fef3c7;
+    --warning-fg: #92400e;
 
-    --focus-ring: 0 0 0 3px rgba(56, 189, 248, 0.4);
+    --focus-ring: 0 0 0 3px rgba(40, 141, 204, 0.35);
   }
 }
 
@@ -365,11 +380,18 @@ code {
   background: var(--surface-2);
 }
 
+/* Solid (bordered) secondary buttons get a touch more definition on hover;
+   ghost/primary opt out below so they stay borderless. */
+.btn:not(.btn--ghost):not(.btn--primary):hover {
+  border-color: var(--text-faint);
+}
+
 .btn:active {
   transform: translateY(1px);
 }
 
 .btn:focus-visible {
+  outline: none;
   box-shadow: var(--focus-ring);
 }
 
@@ -381,17 +403,27 @@ code {
 }
 
 .btn--primary {
-  --btn-bg: var(--accent);
-  --btn-fg: var(--accent-fg);
+  --btn-bg: var(--btn-primary-bg);
+  --btn-fg: var(--btn-primary-fg);
   --btn-border: transparent;
+  font-weight: var(--fw-semibold);
+  padding-inline: var(--sp-5);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
 .btn--primary:hover {
-  background: var(--accent-hover);
+  background: var(--btn-primary-hover);
+  border-color: transparent;
+  box-shadow: 0 2px 8px -1px color-mix(in srgb, var(--brand-hero) 45%, transparent);
 }
 
 .btn--primary:active {
-  background: var(--accent-active);
+  background: var(--btn-primary-active);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+.btn--primary:focus-visible {
+  box-shadow: var(--focus-ring), 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
 .btn--danger {
@@ -598,6 +630,191 @@ code {
   border-color: var(--accent);
 }
 
+/* Dropzone — a drag-and-drop upload surface with a staged file list.
+   .dropzone__drop is the visual drop/browse area; the <input type="file"> is an
+   invisible overlay over IT ONLY (so click-to-browse and native drop still work
+   without JS). The staged list (.dropzone__files) sits below, outside the
+   overlay, so its remove buttons are clickable. Drops anywhere in .dropzone are
+   captured by app.js and accumulated. */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.dropzone__drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+  background: var(--surface-2);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.dropzone__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dropzone__icon {
+  color: var(--text-faint);
+}
+
+.dropzone__text {
+  margin: 0;
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+
+.dropzone__link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dropzone__hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* Hover / keyboard-focus (the overlaid input carries focus) / active drag. */
+.dropzone__drop:hover,
+.dropzone__drop:focus-within {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.dropzone__drop:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.dropzone--drag .dropzone__drop {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-soft);
+}
+
+.dropzone--filled .dropzone__drop {
+  border-style: solid;
+  border-color: var(--border-strong);
+}
+
+/* Staged file list (built by app.js). */
+.dropzone__files {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.dz-files__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+}
+
+.dz-files__clear {
+  font: inherit;
+  font-weight: var(--fw-medium);
+  color: var(--danger-fg);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.dz-files__clear:hover {
+  text-decoration: underline;
+}
+
+.dz-files__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dz-file {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.dz-file + .dz-file {
+  border-top: 1px solid var(--border);
+}
+
+.dz-file__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dz-file__size {
+  flex: 0 0 auto;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.dz-file__remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.dz-file__remove:hover {
+  color: var(--danger-fg);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.dz-file__remove:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Opt-in "use file name" button under the Slug field. */
+.autofill-btn {
+  margin-top: var(--sp-2);
+}
+
 .form-actions {
   display: flex;
   align-items: center;
@@ -664,6 +881,18 @@ code {
 .badge--unlinked {
   background: var(--warning-soft);
   color: var(--warning-fg);
+}
+
+/* Marks the file served at the site root. Inline beside a filename, so it uses
+   a tighter gap and no leading dot. */
+.badge--index {
+  margin-left: var(--sp-2);
+  background: var(--accent-soft);
+  color: var(--accent-soft-fg);
+}
+
+.badge--index::before {
+  display: none;
 }
 
 /* ---------- Tables ---------- */

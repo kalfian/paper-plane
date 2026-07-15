@@ -124,6 +124,17 @@ Form POSTs (multipart) to `/_app/projects` with fields:
   `files` (file input, `multiple`, optional; a `.zip` is extracted),
   `csrf_token` (hidden). Form must be `enctype="multipart/form-data"`.
 
+The `files` input is wrapped in a `.dropzone` (`[data-dropzone][data-autofill]`)
+enhanced by `app.js`. The `<input>` overlays only the `.dropzone__drop` area;
+below it a `[data-dz-list]` container shows the **staged** files. Dropping or
+browsing **accumulates** (deduped by base name, newer wins) rather than
+replacing, each staged file has a remove button, and the input is kept in sync so
+a normal submit uploads the staged set. When exactly one HTML file is staged,
+`name`/`slug` autofill from its file name (unless the user has typed there). The
+bare input still works without JavaScript (browse + native drop), minus
+accumulation and the list. Server side (see below), a lone non-`index.html` HTML
+upload is stored as `index.html`.
+
 On success: redirect `303` to the file manager. On failure: re-render (HTTP 200)
 with `Error`.
 
@@ -160,7 +171,12 @@ html/htm/css/js/txt/md/json/svg/xml/csv).
 
 Forms on this page (all need `csrf_token`):
 - Upload → POST (multipart) `/_app/projects/{id}/files`, field `files`
-  (`multiple`; `.zip` extracted). `enctype="multipart/form-data"`.
+  (`multiple`; `.zip` extracted). `enctype="multipart/form-data"`. The input is
+  wrapped in a `.dropzone` (`[data-dropzone]`, no autofill here): drops accumulate
+  into a removable staged list before submit (see the create form above).
+  Auto-index rule: a **single** non-`index.html` HTML upload is stored as
+  `index.html`, but only when the site has no `index.html` yet — an existing one
+  is never overwritten (the file keeps its own base name).
 - Save edited file → POST `/_app/projects/{id}/files/save` with `path`,
   `content`. Only text-editable extensions are accepted. On success it
   redirects (`303`) back to the **editor** for the same file
