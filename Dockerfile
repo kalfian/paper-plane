@@ -2,7 +2,12 @@
 
 # ---- Build stage ------------------------------------------------------------
 # Pure-Go build (no CGO), statically linked so it can run on distroless/static.
-FROM golang:1.26 AS build
+#
+# The build stage is pinned to $BUILDPLATFORM so the Go toolchain always runs
+# natively on the builder (never emulated), and cross-compiles to the requested
+# $TARGETARCH via GOARCH. This makes multi-arch builds (linux/amd64, linux/arm64)
+# fast — no QEMU needed, since the runtime stage below only COPYs files.
+FROM --platform=$BUILDPLATFORM golang:1.26 AS build
 
 WORKDIR /src
 
@@ -10,9 +15,14 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the rest of the source and build a small static binary.
+# TARGETOS/TARGETARCH are provided automatically by BuildKit per target platform.
+ARG TARGETOS
+ARG TARGETARCH
+
+# Copy the rest of the source and build a small static binary for the target arch.
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /paperplane ./cmd/paperplane
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -o /paperplane ./cmd/paperplane
 
 # Pre-create the data dir here so it can be copied into the runtime image with
 # nonroot ownership. distroless has no shell, so we cannot mkdir/chown there.
