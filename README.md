@@ -26,6 +26,9 @@ directory. No CGO, no Node toolchain, no external services.
   their files remain on disk; relink to restore.
 - **Auth + CSRF** — global admin password (bcrypt), signed stateless session
   cookie, CSRF token on every mutation.
+- **REST API** — a JSON API under `/api/v1` for project + file CRUD, authenticated
+  with bearer API keys (managed in the admin UI). Built for scripts and AI agents.
+  See [`docs/API.md`](docs/API.md) and [`docs/openapi.yaml`](docs/openapi.yaml).
 - **SQLite storage** — metadata in SQLite (WAL mode, pure-Go driver); site files
   on the filesystem.
 - **Single binary** — templates and static assets are `go:embed`-ed into the
@@ -149,15 +152,51 @@ Notes:
   `http://127.0.0.1:${PORT}/_app/healthz` and exits 0/1. The distroless runtime
   has no shell or curl, so the subcommand is used instead.
 
+## REST API
+
+Paper Plane exposes a JSON REST API under `/api/v1` for managing projects and
+files without the web UI — handy for CI, scripts, and AI agents. Full reference:
+[`docs/API.md`](docs/API.md); machine-readable spec:
+[`docs/openapi.yaml`](docs/openapi.yaml).
+
+**Authentication.** Create an API key in the admin UI (**Settings → API keys**).
+The plaintext key is shown once; only its SHA-256 hash is stored. Send it as a
+bearer token:
+
+```sh
+curl -s https://example.com/api/v1/projects \
+  -H "Authorization: Bearer $PP_API_KEY"
+```
+
+**Endpoints.**
+
+| Method + path                               | Description                    |
+|---------------------------------------------|--------------------------------|
+| `GET /api/v1`                               | Discovery metadata (public).   |
+| `GET /api/v1/projects`                      | List projects.                 |
+| `POST /api/v1/projects`                     | Create a project.              |
+| `GET /api/v1/projects/{id}`                 | Get a project.                 |
+| `PATCH /api/v1/projects/{id}`               | Update name / status / index.  |
+| `DELETE /api/v1/projects/{id}`              | Delete a project + its files.  |
+| `GET /api/v1/projects/{id}/files`           | List files.                    |
+| `GET /api/v1/projects/{id}/files/{path}`    | Read a file (utf8 or base64).  |
+| `PUT /api/v1/projects/{id}/files/{path}`    | Create / overwrite a file.     |
+| `DELETE /api/v1/projects/{id}/files/{path}` | Delete a file.                 |
+
+The API uses bearer-token auth instead of the cookie session + CSRF that guard
+`/_app/*`, since API clients are non-browser. Keys can only be created/revoked
+from the admin UI, never through the API.
+
 ## How it works / Architecture
 
 **Routing.** A single `net/http.ServeMux` (Go 1.22 method+path patterns) serves
-two namespaces. The admin app lives under `/_app/*` and always wins because its
-patterns are more specific than the catch-all `GET /` fallback. Everything else
-is treated as a site request: the first path segment is resolved as a project
-slug, and if the project is `active`, its files are served. Unknown or
-`unlinked` slugs return 404. `GET /<slug>` (no trailing slash) 301-redirects to
-`/<slug>/` so relative assets and the injected `<base>` resolve correctly.
+three namespaces. The admin app lives under `/_app/*` and the REST API under
+`/api/v1/*`; both always win because their patterns are more specific than the
+catch-all `GET /` fallback. Everything else is treated as a site request: the
+first path segment is resolved as a project slug, and if the project is `active`,
+its files are served. Unknown or `unlinked` slugs return 404. `GET /<slug>` (no
+trailing slash) 301-redirects to `/<slug>/` so relative assets and the injected
+`<base>` resolve correctly.
 
 Key admin routes: `GET /_app/login`, `POST /_app/login`, `POST /_app/logout`,
 `GET /_app/` (dashboard), `.../projects` CRUD, `.../projects/{id}/files*` for
@@ -208,8 +247,9 @@ binary is statically linked and runs on a distroless/static base image.
 
 Packages: `config` (env loading), `store` (SQLite + migrations), `sitefs`
 (path-safe file operations + zip extraction), `auth` (password/session/CSRF),
-`model` (domain types), and `server` (HTTP wiring), with `web` holding the
-embedded templates and static assets.
+`apikey` (REST API token generation + hashing), `model` (domain types), and
+`server` (HTTP wiring), with `web` holding the embedded templates and static
+assets.
 
 ## Security notes
 
@@ -218,7 +258,12 @@ embedded templates and static assets.
   environment. Change it later via Settings → Change password.
 - **Sessions** — stateless, HMAC-SHA256-signed cookies (`HttpOnly`,
   `SameSite=Lax`, 7-day TTL); marked `Secure` when `APP_URL` is HTTPS.
-- **CSRF** — every mutating request (`POST`) requires a valid signed CSRF token.
+- **CSRF** — every mutating admin request (`POST`) requires a valid signed CSRF
+  token.
+- **API keys** — REST API access uses high-entropy bearer keys; only their
+  SHA-256 hash is stored (the plaintext is shown once at creation and is
+  unrecoverable), and lookups compare hashes in constant time. Keys can be
+  created and revoked from the admin UI only, never through the API itself.
 - **Upload guards** — zip-slip and path-traversal are rejected; uploads are
   capped at **50 MiB per request** and **500 entries per zip archive**.
 - **TLS** — Paper Plane does not terminate TLS. Put a reverse proxy (Caddy,

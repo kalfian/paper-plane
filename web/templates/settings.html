@@ -66,5 +66,104 @@
     </form>
   </div>
 </div>
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">API keys</h2>
+    <p class="hint">
+      API keys authenticate requests to the REST API — send one as
+      <code>Authorization: Bearer &lt;key&gt;</code>. See the
+      <a href="/api/v1">API reference</a>.
+    </p>
+
+    {{if .KeyError}}
+    <div class="alert alert--error" role="alert">
+      <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>{{.KeyError}}</span>
+    </div>
+    {{end}}
+
+    {{if .NewKey}}
+    <div class="alert alert--warning" role="alert">
+      <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 1.5 1 14h14L8 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M8 6.5v3.5M8 12h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span><strong>Copy this key now.</strong> This is the only time it will be
+        shown — you won't be able to see it again after leaving this page.</span>
+    </div>
+    <div class="field">
+      <label class="label" for="new-api-key">Your new key</label>
+      <input class="input input--mono" type="text" id="new-api-key" value="{{.NewKey}}"
+             readonly spellcheck="false" onfocus="this.select()"
+             aria-describedby="new-api-key-hint">
+      <p class="hint" id="new-api-key-hint">Click to select, then copy.</p>
+    </div>
+    {{end}}
+
+    {{if .APIKeys}}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Created</th>
+            <th scope="col">Last used</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .APIKeys}}
+          <tr>
+            <td class="cell-name">{{.Name}}</td>
+            <td class="num">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+            <td class="num">{{if .LastUsedAt}}{{.LastUsedAt.Format "2006-01-02 15:04"}}{{else}}Never{{end}}</td>
+            <td>
+              <div class="row-actions">
+                <form class="inline-form" method="POST"
+                      action="/_app/settings/api-keys/{{.ID}}/delete"
+                      hx-post="/_app/settings/api-keys/{{.ID}}/delete"
+                      hx-confirm="Revoke “{{.Name}}”? Any client using this key will stop working immediately.">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="btn btn--danger btn--sm">Revoke</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty">
+      <svg class="empty__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 7a4 4 0 1 0-3.3 3.94L13 13l1.5-1.5L16 13l2-2-2.06-2.06A4 4 0 0 0 14 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+        <circle cx="10" cy="7" r="1" fill="currentColor"/>
+      </svg>
+      <p class="empty__title">No API keys yet</p>
+      <p class="empty__text">Create a key below to authenticate requests to the
+        REST API from scripts or CI.</p>
+    </div>
+    {{end}}
+
+    <form class="key-create" method="POST" action="/_app/settings/api-keys"
+          hx-post="/_app/settings/api-keys">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field">
+        <label class="label" for="key-name">Key name</label>
+        <input class="input" type="text" id="key-name" name="name"
+               placeholder="e.g. ci-deploy" autocomplete="off" required
+               aria-describedby="key-name-hint" {{if .KeyError}}aria-invalid="true"{{end}}>
+        <p class="hint" id="key-name-hint">A label to help you recognise this key later.</p>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Create key</button>
+      </div>
+    </form>
+  </div>
+</div>
 {{end}}
 </content>

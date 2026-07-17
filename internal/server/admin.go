@@ -23,6 +23,7 @@ var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 // application routes or are otherwise reserved.
 var reservedSlugs = map[string]bool{
 	"_app":    true,
+	"api":     true,
 	"healthz": true,
 	"static":  true,
 	"assets":  true,

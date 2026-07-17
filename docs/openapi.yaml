@@ -1,0 +1,297 @@
+openapi: 3.1.0
+info:
+  title: Paper Plane REST API
+  version: "1.0.0"
+  description: >
+    JSON REST API for managing static-site projects and their files. Designed for
+    scripts and AI agents. Authenticate with a bearer API key created in the admin
+    UI (Settings → API keys). See docs/API.md for narrative documentation.
+servers:
+  - url: "{baseUrl}/api/v1"
+    variables:
+      baseUrl:
+        default: https://example.com
+        description: The public base URL of the Paper Plane instance.
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: discovery
+  - name: projects
+  - name: files
+
+paths:
+  /:
+    get:
+      tags: [discovery]
+      summary: API discovery metadata
+      operationId: getApiIndex
+      security: []
+      responses:
+        "200":
+          description: API metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: { type: string }
+                  version: { type: string }
+                  auth: { type: string }
+                  resources:
+                    type: object
+                    additionalProperties: { type: string }
+
+  /projects:
+    get:
+      tags: [projects]
+      summary: List projects
+      operationId: listProjects
+      responses:
+        "200":
+          description: All projects, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [projects]
+      summary: Create a project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name: { type: string, minLength: 1 }
+                slug:
+                  type: string
+                  pattern: "^[a-z0-9][a-z0-9-]*$"
+                  maxLength: 63
+                status:
+                  type: string
+                  enum: [active, unlinked]
+                  default: active
+      responses:
+        "201":
+          description: The created project.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /projects/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [projects]
+      summary: Get a project
+      operationId: getProject
+      responses:
+        "200":
+          description: The project.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [projects]
+      summary: Update a project (partial)
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1 }
+                status: { type: string, enum: [active, unlinked] }
+                index_file:
+                  type: string
+                  description: Must reference an existing file; empty resets to index.html.
+      responses:
+        "200":
+          description: The updated project.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [projects]
+      summary: Delete a project and all its files
+      operationId: deleteProject
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects/{id}/files:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [files]
+      summary: List files in a project
+      operationId: listFiles
+      responses:
+        "200":
+          description: The file list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [files]
+                properties:
+                  files:
+                    type: array
+                    items: { $ref: "#/components/schemas/FileMeta" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects/{id}/files/{path}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/FilePath"
+    get:
+      tags: [files]
+      summary: Read a file
+      operationId: getFile
+      responses:
+        "200":
+          description: The file content (utf8 or base64).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileContent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [files]
+      summary: Create or overwrite a file
+      operationId: putFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                encoding:
+                  type: string
+                  enum: [utf8, base64]
+                  default: utf8
+      responses:
+        "200":
+          description: File overwritten.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileMeta" }
+        "201":
+          description: File created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileMeta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [files]
+      summary: Delete a file
+      operationId: deleteFile
+      responses:
+        "204": { description: Deleted. }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "API key created in the admin UI. Send: Authorization: Bearer <key>."
+
+  parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      description: The project id.
+      schema: { type: string }
+    FilePath:
+      name: path
+      in: path
+      required: true
+      description: Slash-separated file path within the site.
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Error:
+      description: Error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [active, unlinked] }
+        index_file: { type: string }
+        site_url: { type: string }
+        file_count: { type: integer }
+        size: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    FileMeta:
+      type: object
+      properties:
+        path: { type: string }
+        size: { type: integer, format: int64 }
+    FileContent:
+      type: object
+      properties:
+        path: { type: string }
+        size: { type: integer, format: int64 }
+        encoding: { type: string, enum: [utf8, base64] }
+        content: { type: string }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }

@@ -62,16 +62,19 @@ redirects `303` to `/_app/`. `GET /_app/login` redirects here while no password
 is configured.
 
 ### `GET /_app/settings` → `settings.html`
-Authenticated account settings; currently a single **change password** form.
-Data `settingsData`:
+Authenticated account settings: a **change password** form and an **API keys**
+section (create / list / revoke keys for the REST API). Data `settingsData`:
 
-| Field       | Type   | Notes                                            |
-|-------------|--------|--------------------------------------------------|
-| `CSRFToken` | string | Hidden `csrf_token` input.                       |
-| `Flash`     | string | Optional success message (from `?flash=`).       |
-| `Error`     | string | Optional error message.                          |
+| Field       | Type            | Notes                                                        |
+|-------------|-----------------|--------------------------------------------------------------|
+| `CSRFToken` | string          | Hidden `csrf_token` input.                                   |
+| `Flash`     | string          | Optional success message (from `?flash=`).                  |
+| `Error`     | string          | Optional error message (change-password / general).         |
+| `APIKeys`   | []apiKeyView    | Existing keys: `ID`, `Name`, `CreatedAt`, `LastUsedAt` (*time.Time, nil = never used). Never carries plaintext. |
+| `NewKey`    | string          | A freshly-created **plaintext** token, shown exactly once (only on the create response). Empty otherwise. |
+| `KeyError`  | string          | Optional error specific to the API keys section.            |
 
-Form POSTs to `/_app/settings/password` with fields:
+**Change password** — form POSTs to `/_app/settings/password` with fields:
 - `current_password` (text, required; must match the stored hash)
 - `new_password` (text, required, ≥8 and ≤72 chars, must differ from current)
 - `confirm_password` (text, required, must equal `new_password`)
@@ -80,6 +83,13 @@ Form POSTs to `/_app/settings/password` with fields:
 On success: redirect `303` to `/_app/settings?flash=Password+updated.` (the
 current session stays valid — the cookie secret is not rotated). On failure:
 re-render (HTTP 200) with `Error`; passwords are never echoed back.
+
+**API keys** — two forms:
+- Create: POST `/_app/settings/api-keys` with `name` (text, required, ≤60 chars)
+  + `csrf_token`. On success re-renders (HTTP 200) with `NewKey` set to the
+  plaintext token (shown once; only the SHA-256 hash is stored).
+- Revoke: POST `/_app/settings/api-keys/{id}/delete` with `csrf_token`. Redirects
+  `303` to `/_app/settings` with a flash.
 
 ## Handlers → templates (implemented in Phases 3 & 5)
 

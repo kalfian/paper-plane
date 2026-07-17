@@ -1,5 +1,8 @@
 # Docs (internal planning, tidak perlu di-commit)
-/docs/
+/docs/*
+# ...kecuali dokumentasi API publik (dikonsumsi user/AI, dilink dari README).
+!/docs/API.md
+!/docs/openapi.yaml
 
 # Runtime data (sqlite + situs statis yang di-upload)
 /data/

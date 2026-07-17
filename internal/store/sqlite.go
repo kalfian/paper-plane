@@ -195,6 +195,98 @@ func (s *SQLite) SetSetting(ctx context.Context, key, value string) error {
 	return err
 }
 
+// CreateAPIKey inserts k, stamping CreatedAt (UTC). LastUsedAt starts NULL.
+func (s *SQLite) CreateAPIKey(ctx context.Context, k *model.APIKey) error {
+	now := s.now().UTC()
+	k.CreatedAt = now
+	k.LastUsedAt = nil
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO api_keys (id, name, key_hash, created_at, last_used_at)
+		 VALUES (?, ?, ?, ?, NULL)`,
+		k.ID, k.Name, k.KeyHash, now.Format(timeLayout),
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrKeyExists
+		}
+		return err
+	}
+	return nil
+}
+
+// ListAPIKeys returns all API keys, newest first.
+func (s *SQLite) ListAPIKeys(ctx context.Context) ([]model.APIKey, error) {
+	rows, err := s.db.QueryContext(ctx, selectAPIKey+` ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []model.APIKey
+	for rows.Next() {
+		k, err := scanAPIKey(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *k)
+	}
+	return out, rows.Err()
+}
+
+// GetAPIKeyByHash returns the API key with the given hex hash.
+func (s *SQLite) GetAPIKeyByHash(ctx context.Context, keyHash string) (*model.APIKey, error) {
+	k, err := scanAPIKey(s.db.QueryRowContext(ctx, selectAPIKey+` WHERE key_hash = ?`, keyHash))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return k, err
+}
+
+// TouchAPIKey records the key's last use. A missing key is not an error.
+func (s *SQLite) TouchAPIKey(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE api_keys SET last_used_at = ? WHERE id = ?`,
+		s.now().UTC().Format(timeLayout), id,
+	)
+	return err
+}
+
+// DeleteAPIKey removes the key row.
+func (s *SQLite) DeleteAPIKey(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	return requireOneRow(res)
+}
+
+const selectAPIKey = `SELECT id, name, key_hash, created_at, last_used_at FROM api_keys`
+
+// scanAPIKey reads the api_keys columns in selectAPIKey order. last_used_at is
+// nullable and mapped to a *time.Time (nil when NULL).
+func scanAPIKey(sc rowScanner) (*model.APIKey, error) {
+	var (
+		k          model.APIKey
+		createdStr string
+		lastUsed   sql.NullString
+	)
+	if err := sc.Scan(&k.ID, &k.Name, &k.KeyHash, &createdStr, &lastUsed); err != nil {
+		return nil, err
+	}
+	var err error
+	if k.CreatedAt, err = time.Parse(timeLayout, createdStr); err != nil {
+		return nil, fmt.Errorf("parse created_at: %w", err)
+	}
+	if lastUsed.Valid {
+		t, perr := time.Parse(timeLayout, lastUsed.String)
+		if perr != nil {
+			return nil, fmt.Errorf("parse last_used_at: %w", perr)
+		}
+		k.LastUsedAt = &t
+	}
+	return &k, nil
+}
+
 const selectProject = `SELECT id, name, slug, status, index_file, created_at, updated_at FROM projects`
 
 // rowScanner is satisfied by both *sql.Row and *sql.Rows.

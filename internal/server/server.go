@@ -110,11 +110,34 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /_app/projects/{id}/files/rename", post(s.handleFileRename))
 	mux.Handle("POST /_app/projects/{id}/files/index", post(s.handleFileSetIndex))
 
+	// Account settings: API key management.
+	mux.Handle("POST /_app/settings/api-keys", post(s.handleAPIKeyCreate))
+	mux.Handle("POST /_app/settings/api-keys/{id}/delete", post(s.handleAPIKeyDelete))
+
 	// Any other /_app/* GET is an unknown admin path → 404 (still auth-gated),
 	// so it is never mistaken for a site slug by the root handler below.
 	mux.Handle("GET /_app/", get(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}))
+
+	// REST API (/api/v1/*): JSON, bearer API-key auth (no cookie/CSRF). These
+	// patterns are more specific than the "GET /" site fallback, so they take
+	// precedence; "api" is a reserved slug so no site can shadow them.
+	apiKey := func(h http.HandlerFunc) http.Handler { return chain(h, s.requireAPIKey) }
+
+	mux.HandleFunc("GET /api/v1", s.handleAPIIndex)
+	mux.HandleFunc("GET /api/v1/", s.handleAPIIndex)
+
+	mux.Handle("GET /api/v1/projects", apiKey(s.handleAPIProjectsList))
+	mux.Handle("POST /api/v1/projects", apiKey(s.handleAPIProjectCreate))
+	mux.Handle("GET /api/v1/projects/{id}", apiKey(s.handleAPIProjectGet))
+	mux.Handle("PATCH /api/v1/projects/{id}", apiKey(s.handleAPIProjectUpdate))
+	mux.Handle("DELETE /api/v1/projects/{id}", apiKey(s.handleAPIProjectDelete))
+
+	mux.Handle("GET /api/v1/projects/{id}/files", apiKey(s.handleAPIFilesList))
+	mux.Handle("GET /api/v1/projects/{id}/files/{path...}", apiKey(s.handleAPIFileGet))
+	mux.Handle("PUT /api/v1/projects/{id}/files/{path...}", apiKey(s.handleAPIFilePut))
+	mux.Handle("DELETE /api/v1/projects/{id}/files/{path...}", apiKey(s.handleAPIFileDelete))
 
 	// Fallback: everything else is a static-site request resolved by slug. The
 	// /_app/* patterns above are more specific and take precedence.

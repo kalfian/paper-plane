@@ -25,6 +25,9 @@ var (
 	// ErrSlugExists is returned when creating/updating a project would violate
 	// the unique slug constraint.
 	ErrSlugExists = errors.New("store: slug already exists")
+	// ErrKeyExists is returned when creating an API key would violate the unique
+	// key-hash constraint (an astronomically unlikely collision).
+	ErrKeyExists = errors.New("store: api key already exists")
 )
 
 // Store is the persistence boundary. It is defined as an interface so handlers
@@ -54,6 +57,20 @@ type Store interface {
 	GetSetting(ctx context.Context, key string) (string, error)
 	// SetSetting upserts key=value.
 	SetSetting(ctx context.Context, key, value string) error
+
+	// CreateAPIKey inserts k. k.ID and k.KeyHash must be set; CreatedAt is set by
+	// the implementation. Returns ErrKeyExists on a duplicate key hash.
+	CreateAPIKey(ctx context.Context, k *model.APIKey) error
+	// ListAPIKeys returns all API keys ordered by created_at descending. The
+	// returned keys never include plaintext (only the stored hash).
+	ListAPIKeys(ctx context.Context) ([]model.APIKey, error)
+	// GetAPIKeyByHash returns the API key with the given hex hash, or ErrNotFound.
+	GetAPIKeyByHash(ctx context.Context, keyHash string) (*model.APIKey, error)
+	// TouchAPIKey sets last_used_at=now for the key with id. A missing key is not
+	// an error (best-effort usage tracking).
+	TouchAPIKey(ctx context.Context, id string) error
+	// DeleteAPIKey removes the key row. Returns ErrNotFound if missing.
+	DeleteAPIKey(ctx context.Context, id string) error
 
 	// Close releases underlying resources.
 	Close() error

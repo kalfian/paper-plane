@@ -194,3 +194,78 @@ func TestSettings(t *testing.T) {
 		t.Fatalf("GetSetting after upsert = %q, want v2", v)
 	}
 }
+
+func TestAPIKeyCRUD(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	k := &model.APIKey{ID: NewID(), Name: "ci-bot", KeyHash: "hash-1"}
+	if err := s.CreateAPIKey(ctx, k); err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if k.CreatedAt.IsZero() {
+		t.Fatal("CreatedAt not set on create")
+	}
+	if k.LastUsedAt != nil {
+		t.Fatal("LastUsedAt should start nil")
+	}
+
+	// Lookup by hash.
+	got, err := s.GetAPIKeyByHash(ctx, "hash-1")
+	if err != nil {
+		t.Fatalf("GetAPIKeyByHash: %v", err)
+	}
+	if got.ID != k.ID || got.Name != "ci-bot" {
+		t.Fatalf("GetAPIKeyByHash mismatch: %+v", got)
+	}
+	if got.LastUsedAt != nil {
+		t.Fatal("LastUsedAt should be nil before touch")
+	}
+
+	// Missing hash → ErrNotFound.
+	if _, err := s.GetAPIKeyByHash(ctx, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetAPIKeyByHash(missing) err = %v, want ErrNotFound", err)
+	}
+
+	// Touch records last use.
+	if err := s.TouchAPIKey(ctx, k.ID); err != nil {
+		t.Fatalf("TouchAPIKey: %v", err)
+	}
+	touched, err := s.GetAPIKeyByHash(ctx, "hash-1")
+	if err != nil {
+		t.Fatalf("GetAPIKeyByHash after touch: %v", err)
+	}
+	if touched.LastUsedAt == nil {
+		t.Fatal("LastUsedAt still nil after touch")
+	}
+	// Touching a missing key is not an error.
+	if err := s.TouchAPIKey(ctx, "missing-id"); err != nil {
+		t.Fatalf("TouchAPIKey(missing) = %v, want nil", err)
+	}
+
+	// List.
+	list, err := s.ListAPIKeys(ctx)
+	if err != nil {
+		t.Fatalf("ListAPIKeys: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != k.ID {
+		t.Fatalf("ListAPIKeys = %+v, want one key %q", list, k.ID)
+	}
+
+	// Duplicate hash → ErrKeyExists.
+	dup := &model.APIKey{ID: NewID(), Name: "dup", KeyHash: "hash-1"}
+	if err := s.CreateAPIKey(ctx, dup); !errors.Is(err, ErrKeyExists) {
+		t.Fatalf("CreateAPIKey(dup) err = %v, want ErrKeyExists", err)
+	}
+
+	// Delete.
+	if err := s.DeleteAPIKey(ctx, k.ID); err != nil {
+		t.Fatalf("DeleteAPIKey: %v", err)
+	}
+	if err := s.DeleteAPIKey(ctx, k.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("DeleteAPIKey(again) err = %v, want ErrNotFound", err)
+	}
+	if _, err := s.GetAPIKeyByHash(ctx, "hash-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetAPIKeyByHash after delete err = %v, want ErrNotFound", err)
+	}
+}

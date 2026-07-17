@@ -34,6 +34,16 @@ type Project struct {
 	UpdatedAt time.Time // UTC
 }
 
+// APIKey is a REST API access token. Only KeyHash (hex SHA-256 of the plaintext
+// token) is persisted; the plaintext is shown to the operator once at creation.
+type APIKey struct {
+	ID         string     // nanoid
+	Name       string     // human-friendly label
+	KeyHash    string     // hex-encoded SHA-256 of the plaintext key
+	CreatedAt  time.Time  // UTC
+	LastUsedAt *time.Time // UTC; nil until the key is first used
+}
+
 // DefaultIndexFile is the landing-page filename used when a project has none set.
 const DefaultIndexFile = "index.html"
 

@@ -571,6 +571,19 @@ code {
   border-color: var(--danger);
 }
 
+/* A readonly input showing a value to copy (e.g. a freshly-minted API token).
+   Unlike a plain readonly field, the value must stay high-contrast and legible,
+   so it keeps full ink and a monospace face; cursor is text to signal select. */
+.input--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.input--mono[readonly] {
+  color: var(--text);
+  cursor: text;
+}
+
 .textarea {
   min-height: 320px;
   resize: vertical;
@@ -823,6 +836,14 @@ code {
   flex-wrap: wrap;
 }
 
+/* The "create key" form sits below the existing-keys list/empty state in the
+   same card; a hairline separates the read view from the create action. */
+.key-create {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
 /* ---------- Alerts ---------- */
 .alert {
   display: flex;
@@ -845,6 +866,12 @@ code {
   background: var(--danger-soft);
   color: var(--danger-fg);
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.alert--warning {
+  background: var(--warning-soft);
+  color: var(--warning-fg);
+  border-color: color-mix(in srgb, var(--warning-fg) 30%, transparent);
 }
 
 .alert__icon {
