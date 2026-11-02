@@ -269,6 +269,7 @@ components:
         status: { type: string, enum: [active, unlinked] }
         index_file: { type: string }
         site_url: { type: string }
+        url: { type: string, description: "Absolute site URL; present only when APP_URL is set." }
         file_count: { type: integer }
         size: { type: integer, format: int64 }
         created_at: { type: string, format: date-time }

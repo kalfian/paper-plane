@@ -1,11 +1,19 @@
 // Command paperplane is the Paper Plane server entrypoint: it loads
 // configuration, opens the store, wires the HTTP server, and runs it with
 // graceful shutdown.
+//
+// Subcommands:
+//
+//	paperplane                 run the server (default)
+//	paperplane healthcheck     probe the local server (Docker HEALTHCHECK)
+//	paperplane token ...       create / list / revoke access tokens (REST + MCP)
+//	paperplane mcp             run a local stdio MCP bridge to a remote instance
 package main
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -26,8 +34,21 @@ func main() {
 	// exit 0/1 accordingly. Used by the Docker HEALTHCHECK because the
 	// distroless runtime image has no shell or curl. Handled before any config
 	// loading so the probe stays a cheap, dependency-free HTTP GET.
-	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
-		os.Exit(healthcheck())
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "healthcheck":
+			os.Exit(healthcheck())
+		case "token":
+			os.Exit(tokenCmd(os.Args[2:], os.Stdout, os.Stderr))
+		case "mcp":
+			os.Exit(mcpCmd(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+		case "help", "-h", "--help":
+			fmt.Fprint(os.Stdout, usage)
+			os.Exit(0)
+		case "version", "--version":
+			fmt.Fprintln(os.Stdout, "paperplane", server.Version)
+			os.Exit(0)
+		}
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -37,6 +58,21 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+const usage = `Paper Plane — self-hosted static site host.
+
+Usage:
+  paperplane                         Run the server (configured via APP_URL, DATA_DIR, PORT).
+  paperplane healthcheck             Exit 0 if the local server is healthy.
+  paperplane token create --name N [--scope all|api|mcp]
+                                     Generate an access token (printed once).
+  paperplane token list              List access tokens.
+  paperplane token revoke <id>       Revoke an access token.
+  paperplane mcp [--url URL] [--token TOKEN] [--root DIR]
+                                     Run a local stdio MCP server that proxies to a
+                                     Paper Plane instance and adds upload_local_path.
+  paperplane version                 Print the version.
+`
 
 // healthcheck performs an HTTP GET to the local server's health endpoint and
 // returns a process exit code: 0 if the endpoint responds 200 OK, 1 otherwise.

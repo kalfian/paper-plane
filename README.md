@@ -185,7 +185,38 @@ curl -s https://example.com/api/v1/projects \
 
 The API uses bearer-token auth instead of the cookie session + CSRF that guard
 `/_app/*`, since API clients are non-browser. Keys can only be created/revoked
-from the admin UI, never through the API.
+from the admin UI or the server CLI (`paperplane token …`), never through the
+API.
+
+## MCP server (AI agents)
+
+Paper Plane is also a [Model Context Protocol](https://modelcontextprotocol.io)
+server, so Claude Code / Claude Desktop / Cursor can create sites and upload
+files directly. Full guide: [`docs/MCP.md`](docs/MCP.md).
+
+1. **Generate a token**: in **Settings → Access tokens**, choose the scope
+   "MCP only" or "REST API + MCP". Or from the CLI:
+   `paperplane token create --name claude --scope mcp` (Docker:
+   `docker compose exec paperplane /paperplane token create --name claude --scope mcp`).
+2. **Connect** (remote, Streamable HTTP):
+
+   ```sh
+   claude mcp add --transport http paperplane https://example.com/api/mcp \
+     --header "Authorization: Bearer pp_…"
+   ```
+
+3. **Optional: upload from disk.** Run the same binary locally as a stdio bridge.
+   It adds `upload_local_path`, which publishes a file or folder (e.g. `dist/`)
+   without base64:
+
+   ```sh
+   claude mcp add paperplane-local -e PAPERPLANE_URL=https://example.com \
+     -e PAPERPLANE_TOKEN=pp_… -- paperplane mcp
+   ```
+
+Tools: `list_projects`, `get_project`, `create_project`, `update_project`,
+`delete_project`, `list_files`, `read_file`, `write_file`, `upload_files`,
+`upload_zip`, `rename_file`, `delete_file` (+ `upload_local_path` via the bridge).
 
 ## How it works / Architecture
 
@@ -260,10 +291,14 @@ assets.
   `SameSite=Lax`, 7-day TTL); marked `Secure` when `APP_URL` is HTTPS.
 - **CSRF** — every mutating admin request (`POST`) requires a valid signed CSRF
   token.
-- **API keys** — REST API access uses high-entropy bearer keys; only their
-  SHA-256 hash is stored (the plaintext is shown once at creation and is
-  unrecoverable), and lookups compare hashes in constant time. Keys can be
-  created and revoked from the admin UI only, never through the API itself.
+- **API keys** — REST API and MCP access use high-entropy bearer keys; only
+  their SHA-256 hash is stored (the plaintext is shown once at creation and is
+  unrecoverable). Each key is scoped (`all` / `api` / `mcp`); a key used on a
+  surface outside its scope gets `403`. Keys can be created and revoked from
+  the admin UI or the server CLI, never through the API or MCP itself.
+- **MCP local bridge** — `paperplane mcp` only reads local files inside its
+  root (default: the directory it was started in), skips dot-files and
+  symlinks by default, and never writes to the local disk.
 - **Upload guards** — zip-slip and path-traversal are rejected; uploads are
   capped at **50 MiB per request** and **500 entries per zip archive**.
 - **TLS** — Paper Plane does not terminate TLS. Put a reverse proxy (Caddy,

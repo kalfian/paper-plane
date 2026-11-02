@@ -1,8 +1,16 @@
 {{/*
   settings.html — admin "Account settings" page. Inherits layout.html.
-  Data: settingsData{ CSRFToken (required), Flash (optional), Error (optional) }.
-  The change-password form is htmx-enhanced (posts to /_app/settings/password
-  and swaps this page's main region, matching project_edit.html).
+  Data: settingsData (see web/templates/CONTRACT.md, "GET /_app/settings"):
+    CSRFToken (required), Flash, Error            — page + change-password form
+    APIKeys []{ID, Name, Scope, ScopeLabel, CreatedAt, LastUsedAt}
+    NewKey, NewKeyScope, NewKeyMCP, KeyError      — access tokens card
+    MCPURL (always set)                           — MCP server card
+    MCPClaudeCommand, MCPJSONConfig, MCPBridgeCommand
+                                                  — only when NewKeyMCP is true
+  Forms are htmx-enhanced (they swap this page's main region, matching
+  project_edit.html). Copy buttons ([data-copy="<id>"]) ship `hidden` and are
+  revealed by app.js; without JS every value sits in a readonly field that
+  selects itself on focus, so copying still works by keyboard and mouse.
 */}}
 {{define "title"}}Settings · Paper Plane{{end}}
 
@@ -69,10 +77,11 @@
 
 <div class="card">
   <div class="card__body">
-    <h2 class="section-title">API keys</h2>
-    <p class="hint">
-      API keys authenticate requests to the REST API — send one as
-      <code>Authorization: Bearer &lt;key&gt;</code>. See the
+    <h2 class="section-title">Access tokens</h2>
+    <p class="hint hint--intro">
+      Access tokens authenticate requests to the REST API and the MCP server —
+      send one as <code>Authorization: Bearer &lt;token&gt;</code>. A token's
+      scope decides which of the two it can reach. See the
       <a href="/api/v1">API reference</a>.
     </p>
 
@@ -87,20 +96,82 @@
     {{end}}
 
     {{if .NewKey}}
-    <div class="alert alert--warning" role="alert">
-      <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M8 1.5 1 14h14L8 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-        <path d="M8 6.5v3.5M8 12h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      <span><strong>Copy this key now.</strong> This is the only time it will be
-        shown — you won't be able to see it again after leaving this page.</span>
-    </div>
-    <div class="field">
-      <label class="label" for="new-api-key">Your new key</label>
-      <input class="input input--mono" type="text" id="new-api-key" value="{{.NewKey}}"
-             readonly spellcheck="false" onfocus="this.select()"
-             aria-describedby="new-api-key-hint">
-      <p class="hint" id="new-api-key-hint">Click to select, then copy.</p>
+    <div class="key-reveal">
+      <div class="alert alert--warning" role="alert">
+        <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M8 1.5 1 14h14L8 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M8 6.5v3.5M8 12h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span><strong>Copy this token now.</strong> This is the only time it will be
+          shown — you won't be able to see it again after leaving this page.</span>
+      </div>
+      <div class="field">
+        <div class="snippet__head">
+          <label class="label" for="new-api-key">Your new token</label>
+          <button type="button" class="btn btn--sm" data-copy="new-api-key"
+                  data-copy-name="Token" hidden>
+            <span data-copy-label>Copy</span><span class="visually-hidden"> token</span>
+          </button>
+        </div>
+        <input class="input input--mono" type="text" id="new-api-key" value="{{.NewKey}}"
+               readonly spellcheck="false" onfocus="this.select()" data-autofocus
+               aria-describedby="new-api-key-hint">
+        <p class="hint" id="new-api-key-hint">Click to select, then copy.</p>
+      </div>
+
+      {{if .NewKeyMCP}}
+      <section class="subsection" aria-labelledby="mcp-connect-title">
+        <h3 class="subsection-title" id="mcp-connect-title">Connect an MCP client</h3>
+        <p class="hint hint--intro">
+          Each snippet already includes your new token, so copy the one that
+          matches your client before leaving this page.
+        </p>
+
+        <div class="field">
+          <div class="snippet__head">
+            <label class="label" for="mcp-claude-cmd">Claude Code (remote HTTP)</label>
+            <button type="button" class="btn btn--sm" data-copy="mcp-claude-cmd"
+                    data-copy-name="Claude Code command" hidden>
+              <span data-copy-label>Copy</span><span class="visually-hidden"> Claude Code command</span>
+            </button>
+          </div>
+          <textarea class="textarea textarea--snippet" id="mcp-claude-cmd" rows="3"
+                    readonly spellcheck="false" autocapitalize="off"
+                    onfocus="this.select()">{{.MCPClaudeCommand}}</textarea>
+        </div>
+
+        <div class="field">
+          <div class="snippet__head">
+            <label class="label" for="mcp-json-config">JSON config (.mcp.json / Claude Desktop / Cursor)</label>
+            <button type="button" class="btn btn--sm" data-copy="mcp-json-config"
+                    data-copy-name="JSON config" hidden>
+              <span data-copy-label>Copy</span><span class="visually-hidden"> JSON config</span>
+            </button>
+          </div>
+          <textarea class="textarea textarea--snippet" id="mcp-json-config" rows="10"
+                    readonly spellcheck="false" autocapitalize="off"
+                    onfocus="this.select()">{{.MCPJSONConfig}}</textarea>
+        </div>
+
+        <div class="field">
+          <div class="snippet__head">
+            <label class="label" for="mcp-bridge-cmd">Local bridge with file upload from disk (stdio)</label>
+            <button type="button" class="btn btn--sm" data-copy="mcp-bridge-cmd"
+                    data-copy-name="Local bridge command" hidden>
+              <span data-copy-label>Copy</span><span class="visually-hidden"> local bridge command</span>
+            </button>
+          </div>
+          <textarea class="textarea textarea--snippet" id="mcp-bridge-cmd" rows="3"
+                    readonly spellcheck="false" autocapitalize="off"
+                    onfocus="this.select()" aria-describedby="mcp-bridge-cmd-hint">{{.MCPBridgeCommand}}</textarea>
+          <p class="hint" id="mcp-bridge-cmd-hint">Run the paperplane binary locally as
+            an MCP server. It proxies to this instance and adds
+            <code>upload_local_path</code>, which uploads files or folders from your
+            machine (restricted to the directory it is started in unless
+            <code>--root</code> is set).</p>
+        </div>
+      </section>
+      {{end}}
     </div>
     {{end}}
 
@@ -110,6 +181,7 @@
         <thead>
           <tr>
             <th scope="col">Name</th>
+            <th scope="col">Scope</th>
             <th scope="col">Created</th>
             <th scope="col">Last used</th>
             <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -119,6 +191,7 @@
           {{range .APIKeys}}
           <tr>
             <td class="cell-name">{{.Name}}</td>
+            <td><span class="badge badge--scope">{{.ScopeLabel}}</span></td>
             <td class="num">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
             <td class="num">{{if .LastUsedAt}}{{.LastUsedAt.Format "2006-01-02 15:04"}}{{else}}Never{{end}}</td>
             <td>
@@ -126,9 +199,9 @@
                 <form class="inline-form" method="POST"
                       action="/_app/settings/api-keys/{{.ID}}/delete"
                       hx-post="/_app/settings/api-keys/{{.ID}}/delete"
-                      hx-confirm="Revoke “{{.Name}}”? Any client using this key will stop working immediately.">
+                      hx-confirm="Revoke “{{.Name}}”? Any client using this token will stop working immediately.">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <button type="submit" class="btn btn--danger btn--sm">Revoke</button>
+                  <button type="submit" class="btn btn--danger btn--sm">Revoke<span class="visually-hidden"> {{.Name}}</span></button>
                 </form>
               </div>
             </td>
@@ -143,9 +216,9 @@
         <path d="M14 7a4 4 0 1 0-3.3 3.94L13 13l1.5-1.5L16 13l2-2-2.06-2.06A4 4 0 0 0 14 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
         <circle cx="10" cy="7" r="1" fill="currentColor"/>
       </svg>
-      <p class="empty__title">No API keys yet</p>
-      <p class="empty__text">Create a key below to authenticate requests to the
-        REST API from scripts or CI.</p>
+      <p class="empty__title">No access tokens yet</p>
+      <p class="empty__text">Create a token below to call the REST API from
+        scripts or CI, or to connect an MCP client such as Claude Code.</p>
     </div>
     {{end}}
 
@@ -153,17 +226,111 @@
           hx-post="/_app/settings/api-keys">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <div class="field">
-        <label class="label" for="key-name">Key name</label>
+        <label class="label" for="key-name">Token name</label>
         <input class="input" type="text" id="key-name" name="name"
                placeholder="e.g. ci-deploy" autocomplete="off" required
                aria-describedby="key-name-hint" {{if .KeyError}}aria-invalid="true"{{end}}>
-        <p class="hint" id="key-name-hint">A label to help you recognise this key later.</p>
+        <p class="hint" id="key-name-hint">A label to help you recognise this token later.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="key-scope">Scope</label>
+        <select class="input select" id="key-scope" name="scope"
+                aria-describedby="key-scope-hint">
+          <option value="all" selected>REST API + MCP</option>
+          <option value="api">REST API only</option>
+          <option value="mcp">MCP only</option>
+        </select>
+        <p class="hint" id="key-scope-hint">Tokens that include MCP also get
+          ready-to-paste client setup snippets after creation.</p>
       </div>
       <div class="form-actions">
-        <button type="submit" class="btn btn--primary">Create key</button>
+        <button type="submit" class="btn btn--primary">Create token</button>
       </div>
     </form>
   </div>
 </div>
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">MCP server</h2>
+    <p class="hint hint--intro">
+      Let AI clients such as Claude Code, Claude Desktop or Cursor manage your
+      projects and files over the Model Context Protocol.
+    </p>
+
+    <div class="field">
+      <div class="snippet__head">
+        <label class="label" for="mcp-url">Endpoint URL</label>
+        <button type="button" class="btn btn--sm" data-copy="mcp-url"
+                data-copy-name="Endpoint URL" hidden>
+          <span data-copy-label>Copy</span><span class="visually-hidden"> endpoint URL</span>
+        </button>
+      </div>
+      <input class="input input--mono" type="text" id="mcp-url" value="{{.MCPURL}}"
+             readonly spellcheck="false" onfocus="this.select()">
+    </div>
+
+    <dl class="spec-list">
+      <dt>Transport</dt>
+      <dd>Streamable HTTP (POST, JSON responses)</dd>
+      <dt>Authentication</dt>
+      <dd><code>Authorization: Bearer &lt;token&gt;</code>, using an access token
+        whose scope includes MCP (<em>REST API + MCP</em> or <em>MCP only</em>).</dd>
+      <dt>Project tools</dt>
+      <dd>
+        <ul class="tool-list">
+          <li><code>list_projects</code></li>
+          <li><code>get_project</code></li>
+          <li><code>create_project</code></li>
+          <li><code>update_project</code></li>
+          <li><code>delete_project</code></li>
+        </ul>
+      </dd>
+      <dt>File tools</dt>
+      <dd>
+        <ul class="tool-list">
+          <li><code>list_files</code></li>
+          <li><code>read_file</code></li>
+          <li><code>write_file</code></li>
+          <li><code>upload_files</code></li>
+          <li><code>upload_zip</code></li>
+          <li><code>rename_file</code></li>
+          <li><code>delete_file</code></li>
+        </ul>
+      </dd>
+    </dl>
+
+    <section class="subsection" aria-labelledby="mcp-cli-title">
+      <h3 class="subsection-title" id="mcp-cli-title">Create a token from the CLI</h3>
+      <p class="hint hint--intro">
+        Prefer the terminal? The server binary prints a new token, shown once,
+        just like this page.
+      </p>
+
+      <div class="field">
+        <div class="snippet__head">
+          <span class="label">Binary</span>
+          <button type="button" class="btn btn--sm" data-copy="cli-token-cmd"
+                  data-copy-name="CLI command" hidden>
+            <span data-copy-label>Copy</span><span class="visually-hidden"> CLI command</span>
+          </button>
+        </div>
+        <pre class="code-block" id="cli-token-cmd"><code>paperplane token create --name &lt;name&gt; --scope mcp</code></pre>
+      </div>
+
+      <div class="field">
+        <div class="snippet__head">
+          <span class="label">Docker Compose</span>
+          <button type="button" class="btn btn--sm" data-copy="cli-docker-cmd"
+                  data-copy-name="Docker Compose command" hidden>
+            <span data-copy-label>Copy</span><span class="visually-hidden"> Docker Compose command</span>
+          </button>
+        </div>
+        <pre class="code-block" id="cli-docker-cmd"><code>docker compose exec paperplane /paperplane token create --name claude --scope mcp</code></pre>
+      </div>
+    </section>
+  </div>
+</div>
+
+<p class="visually-hidden" role="status" data-copy-status></p>
 {{end}}
-</content>

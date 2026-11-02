@@ -1,14 +1,10 @@
 package server
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"net/http"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/kalfian/paper-plane/internal/apikey"
 	"github.com/kalfian/paper-plane/internal/model"
@@ -39,6 +35,7 @@ type apiProject struct {
 	Status    string    `json:"status"`
 	IndexFile string    `json:"index_file"`
 	SiteURL   string    `json:"site_url"`
+	URL       string    `json:"url,omitempty"` // absolute site URL; only when APP_URL is set
 	FileCount int       `json:"file_count"`
 	Size      int64     `json:"size"`
 	CreatedAt time.Time `json:"created_at"`
@@ -129,10 +126,18 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) boo
 
 // --- auth middleware ---
 
-// requireAPIKey authenticates a request via the Authorization: Bearer header. On
-// success it records the key's last-used time (best-effort) and calls next. On
-// failure it writes a 401 JSON error and sets WWW-Authenticate.
+// requireAPIKey authenticates a REST API request via the Authorization: Bearer
+// header and requires a key whose scope grants the REST API.
 func (s *Server) requireAPIKey(next http.Handler) http.Handler {
+	return s.requireKeyScope(model.KeyScope.AllowsAPI, "This key is not allowed to use the REST API (scope: MCP only).", next)
+}
+
+// requireKeyScope authenticates a request via the Authorization: Bearer header
+// and checks the key's scope with allowed. On success it records the key's
+// last-used time (best-effort) and calls next. On failure it writes a 401 (bad
+// or missing key, with WWW-Authenticate) or 403 (valid key, wrong scope) JSON
+// error.
+func (s *Server) requireKeyScope(allowed func(model.KeyScope) bool, forbiddenMsg string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := apikey.FromAuthorizationHeader(r.Header.Get("Authorization"))
 		if token == "" {
@@ -149,6 +154,10 @@ func (s *Server) requireAPIKey(next http.Handler) http.Handler {
 			}
 			s.log.Error("lookup api key", "error", err)
 			s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
+			return
+		}
+		if !allowed(key.Scope) {
+			s.writeAPIError(w, http.StatusForbidden, "forbidden", forbiddenMsg)
 			return
 		}
 		// Best-effort usage tracking; never fail the request on a touch error.
@@ -178,6 +187,7 @@ func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request) {
 			"projects": "/api/v1/projects",
 			"files":    "/api/v1/projects/{id}/files",
 		},
+		"mcp": "POST " + mcpPath + " (Model Context Protocol, Streamable HTTP; same bearer keys with an MCP scope)",
 	})
 }
 
@@ -205,6 +215,7 @@ func (s *Server) toAPIProject(p model.Project) apiProject {
 		Status:    string(p.Status),
 		IndexFile: p.EffectiveIndexFile(),
 		SiteURL:   "/" + p.Slug + "/",
+		URL:       s.absoluteSiteURL(p.Slug),
 		FileCount: count,
 		Size:      size,
 		CreatedAt: p.CreatedAt,
@@ -212,21 +223,29 @@ func (s *Server) toAPIProject(p model.Project) apiProject {
 	}
 }
 
+// absoluteSiteURL returns APP_URL + "/<slug>/", or "" when APP_URL is unset.
+func (s *Server) absoluteSiteURL(slug string) string {
+	if s.cfg.AppURL == "" {
+		return ""
+	}
+	return s.cfg.AppURL + "/" + slug + "/"
+}
+
 // loadProjectAPI fetches the {id} project, writing a JSON 404/500 and returning
 // ok=false when it cannot be served.
 func (s *Server) loadProjectAPI(w http.ResponseWriter, r *http.Request) (*model.Project, bool) {
-	id := r.PathValue("id")
-	p, err := s.store.GetProject(r.Context(), id)
+	p, err := s.getProjectByID(r.Context(), r.PathValue("id"))
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			s.writeAPIError(w, http.StatusNotFound, "not_found", "Project not found.")
-			return nil, false
-		}
-		s.log.Error("api get project", "id", id, "error", err)
-		s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
+		s.writeOpError(w, err)
 		return nil, false
 	}
 	return p, true
+}
+
+// writeOpError writes an operation error (see ops.go) as the JSON envelope.
+func (s *Server) writeOpError(w http.ResponseWriter, err error) {
+	oe := asOpError(err)
+	s.writeAPIError(w, oe.Status, oe.Code, oe.Msg)
 }
 
 // handleAPIProjectsList: GET /api/v1/projects.
@@ -259,55 +278,12 @@ func (s *Server) handleAPIProjectCreate(w http.ResponseWriter, r *http.Request) 
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	name := strings.TrimSpace(req.Name)
-	slug := strings.TrimSpace(req.Slug)
-	if name == "" {
-		s.writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "Name is required.")
-		return
-	}
-	if msg := validateSlug(slug); msg != "" {
-		s.writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", msg)
-		return
-	}
-
-	status := model.StatusActive
-	if req.Status != "" {
-		status = model.Status(req.Status)
-		if !status.Valid() {
-			s.writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", `Status must be "active" or "unlinked".`)
-			return
-		}
-	}
-
-	p := &model.Project{ID: store.NewID(), Name: name, Slug: slug, Status: status}
-	if err := s.store.CreateProject(r.Context(), p); err != nil {
-		if errors.Is(err, store.ErrSlugExists) {
-			s.writeAPIError(w, http.StatusConflict, "slug_exists", "That slug is already in use.")
-			return
-		}
-		s.log.Error("api create project", "error", err)
-		s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
-		return
-	}
-	if err := s.fs.CreateSite(p.ID); err != nil {
-		s.log.Error("api create site dir", "id", p.ID, "error", err)
-		_ = s.store.DeleteProject(r.Context(), p.ID) // roll back the orphan row
-		s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
-		return
-	}
-	// Give the empty site a placeholder landing page so it serves immediately.
-	if err := s.fs.WritePlaceholderIndex(p.ID); err != nil {
-		s.log.Error("api write placeholder", "id", p.ID, "error", err)
-	}
-
-	// Re-fetch to return canonical timestamps/state.
-	created, err := s.store.GetProject(r.Context(), p.ID)
+	p, err := s.createProject(r.Context(), req.Name, req.Slug, req.Status)
 	if err != nil {
-		s.log.Error("api reload created project", "id", p.ID, "error", err)
-		s.writeJSON(w, http.StatusCreated, s.toAPIProject(*p))
+		s.writeOpError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusCreated, s.toAPIProject(*created))
+	s.writeJSON(w, http.StatusCreated, s.toAPIProject(*p))
 }
 
 // handleAPIProjectUpdate: PATCH /api/v1/projects/{id}. Only provided fields
@@ -321,53 +297,9 @@ func (s *Server) handleAPIProjectUpdate(w http.ResponseWriter, r *http.Request) 
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-
-	if req.Name != nil {
-		name := strings.TrimSpace(*req.Name)
-		if name == "" {
-			s.writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "Name must not be empty.")
-			return
-		}
-		p.Name = name
-		if err := s.store.UpdateProject(r.Context(), p); err != nil {
-			s.log.Error("api update project name", "id", p.ID, "error", err)
-			s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
-			return
-		}
-	}
-
-	if req.Status != nil {
-		status := model.Status(strings.TrimSpace(*req.Status))
-		if !status.Valid() {
-			s.writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", `Status must be "active" or "unlinked".`)
-			return
-		}
-		if err := s.store.SetStatus(r.Context(), p.ID, status); err != nil {
-			s.log.Error("api set status", "id", p.ID, "error", err)
-			s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
-			return
-		}
-	}
-
-	if req.IndexFile != nil {
-		idx := strings.TrimSpace(*req.IndexFile)
-		// A non-empty index must reference an existing file; empty resets to the
-		// default (index.html).
-		if idx != "" && !s.fileExists(p.ID, idx) {
-			s.writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", "index_file does not exist in this project.")
-			return
-		}
-		if err := s.store.SetIndexFile(r.Context(), p.ID, idx); err != nil {
-			s.log.Error("api set index file", "id", p.ID, "error", err)
-			s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
-			return
-		}
-	}
-
-	updated, err := s.store.GetProject(r.Context(), p.ID)
+	updated, err := s.updateProject(r.Context(), p, projectPatch(req))
 	if err != nil {
-		s.log.Error("api reload updated project", "id", p.ID, "error", err)
-		s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
+		s.writeOpError(w, err)
 		return
 	}
 	s.writeJSON(w, http.StatusOK, s.toAPIProject(*updated))
@@ -375,18 +307,9 @@ func (s *Server) handleAPIProjectUpdate(w http.ResponseWriter, r *http.Request) 
 
 // handleAPIProjectDelete: DELETE /api/v1/projects/{id}.
 func (s *Server) handleAPIProjectDelete(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := s.store.DeleteProject(r.Context(), id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			s.writeAPIError(w, http.StatusNotFound, "not_found", "Project not found.")
-			return
-		}
-		s.log.Error("api delete project", "id", id, "error", err)
-		s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
+	if err := s.deleteProject(r.Context(), r.PathValue("id")); err != nil {
+		s.writeOpError(w, err)
 		return
-	}
-	if err := s.fs.DeleteSite(id); err != nil {
-		s.log.Error("api delete site dir", "id", id, "error", err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -399,17 +322,12 @@ func (s *Server) handleAPIFilesList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	files, err := s.fs.ListFiles(p.ID)
+	files, err := s.listFiles(p.ID)
 	if err != nil {
-		s.log.Error("api list files", "id", p.ID, "error", err)
-		s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
+		s.writeOpError(w, err)
 		return
 	}
-	out := make([]apiFile, 0, len(files))
-	for _, f := range files {
-		out = append(out, apiFile{Path: f.Path, Size: f.Size})
-	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"files": out})
+	s.writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }
 
 // handleAPIFileGet: GET /api/v1/projects/{id}/files/{path...}. Returns the file
@@ -419,78 +337,39 @@ func (s *Server) handleAPIFileGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	relpath := r.PathValue("path")
-	if strings.TrimSpace(relpath) == "" {
-		s.writeAPIError(w, http.StatusBadRequest, "invalid_request", "A file path is required.")
-		return
-	}
-	data, err := s.fs.ReadFile(p.ID, relpath)
+	resp, err := s.readFile(p.ID, r.PathValue("path"))
 	if err != nil {
-		s.writeFileError(w, err)
+		s.writeOpError(w, err)
 		return
-	}
-	resp := apiFileContent{Path: relpath, Size: int64(len(data))}
-	if utf8.Valid(data) {
-		resp.Encoding = "utf8"
-		resp.Content = string(data)
-	} else {
-		resp.Encoding = "base64"
-		resp.Content = base64.StdEncoding.EncodeToString(data)
 	}
 	s.writeJSON(w, http.StatusOK, resp)
 }
 
-// handleAPIFilePut: PUT /api/v1/projects/{id}/files/{path...}. Creates or
-// overwrites the file with the decoded content.
+// handleAPIFilePut: PUT /api/v1/projects/{id}/files/{path...}. Creates (201) or
+// overwrites (200) the file with the decoded content.
 func (s *Server) handleAPIFilePut(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadProjectAPI(w, r)
 	if !ok {
 		return
 	}
-	relpath := r.PathValue("path")
-	if strings.TrimSpace(relpath) == "" {
-		s.writeAPIError(w, http.StatusBadRequest, "invalid_request", "A file path is required.")
+	if _, err := requirePath(r.PathValue("path")); err != nil {
+		s.writeOpError(w, err)
 		return
 	}
-
 	var req fileWriteReq
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-
-	var data []byte
-	switch enc := strings.ToLower(strings.TrimSpace(req.Encoding)); enc {
-	case "", "utf8", "utf-8", "text":
-		data = []byte(req.Content)
-	case "base64":
-		decoded, derr := base64.StdEncoding.DecodeString(req.Content)
-		if derr != nil {
-			s.writeAPIError(w, http.StatusBadRequest, "invalid_request", "content is not valid base64.")
-			return
-		}
-		data = decoded
-	default:
-		s.writeAPIError(w, http.StatusBadRequest, "invalid_request", `encoding must be "utf8" or "base64".`)
+	f, created, err := s.writeFile(p.ID, r.PathValue("path"), req.Content, req.Encoding)
+	if err != nil {
+		s.writeOpError(w, err)
 		return
 	}
-
-	if int64(len(data)) > sitefs.DefaultMaxUploadBytes {
-		s.writeAPIError(w, http.StatusRequestEntityTooLarge, "too_large", "File content exceeds the size limit.")
-		return
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
 	}
-
-	// Distinguish create (201) from overwrite (200).
-	existed := s.fileExists(p.ID, relpath)
-
-	if err := s.fs.WriteFile(p.ID, relpath, data); err != nil {
-		s.writeFileError(w, err)
-		return
-	}
-	status := http.StatusCreated
-	if existed {
-		status = http.StatusOK
-	}
-	s.writeJSON(w, status, apiFile{Path: relpath, Size: int64(len(data))})
+	s.writeJSON(w, status, f)
 }
 
 // handleAPIFileDelete: DELETE /api/v1/projects/{id}/files/{path...}.
@@ -499,29 +378,9 @@ func (s *Server) handleAPIFileDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	relpath := r.PathValue("path")
-	if strings.TrimSpace(relpath) == "" {
-		s.writeAPIError(w, http.StatusBadRequest, "invalid_request", "A file path is required.")
-		return
-	}
-	if err := s.fs.DeleteFile(p.ID, relpath); err != nil {
-		s.writeFileError(w, err)
+	if err := s.deleteFile(p.ID, r.PathValue("path")); err != nil {
+		s.writeOpError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// writeFileError maps a sitefs/filesystem error to a JSON API error.
-func (s *Server) writeFileError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, sitefs.ErrUnsafePath):
-		s.writeAPIError(w, http.StatusBadRequest, "unsafe_path", "The file path is invalid (path traversal or absolute paths are not allowed).")
-	case errors.Is(err, fs.ErrNotExist):
-		s.writeAPIError(w, http.StatusNotFound, "not_found", "File not found.")
-	case errors.Is(err, sitefs.ErrTooLarge):
-		s.writeAPIError(w, http.StatusRequestEntityTooLarge, "too_large", "File content exceeds the size limit.")
-	default:
-		s.log.Error("api file operation", "error", err)
-		s.writeAPIError(w, http.StatusInternalServerError, "internal", "Internal server error.")
-	}
 }

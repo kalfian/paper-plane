@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -29,6 +31,8 @@ const (
 type apiKeyView struct {
 	ID         string
 	Name       string
+	Scope      string // "all" | "api" | "mcp"
+	ScopeLabel string // human-readable scope
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 }
@@ -46,6 +50,17 @@ type settingsData struct {
 	// KeyError is an error specific to the API keys section (kept separate from
 	// the change-password Error so each form shows its own message).
 	KeyError string
+
+	// NewKeyScope is the scope of NewKey; NewKeyMCP reports whether it may call
+	// the MCP endpoint (and so whether the MCP setup snippets are shown).
+	NewKeyScope string
+	NewKeyMCP   bool
+	// MCPURL is the absolute MCP endpoint URL (always set).
+	MCPURL string
+	// Ready-to-paste MCP client setup for NewKey; empty unless NewKeyMCP.
+	MCPClaudeCommand string
+	MCPJSONConfig    string
+	MCPBridgeCommand string
 }
 
 // handleSettings renders the account settings page (change-password form + API
@@ -62,6 +77,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 // loadAPIKeys populates data.APIKeys from the store, logging (but not failing)
 // on error so the rest of the settings page still renders.
 func (s *Server) loadAPIKeys(r *http.Request, data *settingsData) {
+	data.MCPURL = s.mcpURL(r)
 	keys, err := s.store.ListAPIKeys(r.Context())
 	if err != nil {
 		s.log.Error("list api keys", slog.Any("error", err))
@@ -72,6 +88,8 @@ func (s *Server) loadAPIKeys(r *http.Request, data *settingsData) {
 		views = append(views, apiKeyView{
 			ID:         k.ID,
 			Name:       k.Name,
+			Scope:      string(k.Scope),
+			ScopeLabel: k.Scope.Label(),
 			CreatedAt:  k.CreatedAt,
 			LastUsedAt: k.LastUsedAt,
 		})
@@ -93,8 +111,17 @@ func (s *Server) handleAPIKeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope := model.KeyScope(strings.TrimSpace(r.FormValue("scope")))
+	if scope == "" {
+		scope = model.ScopeAll
+	}
+	if !scope.Valid() {
+		s.renderKeyError(w, r, "Choose a valid scope.")
+		return
+	}
+
 	token, hash := apikey.Generate()
-	k := &model.APIKey{ID: store.NewID(), Name: name, KeyHash: hash}
+	k := &model.APIKey{ID: store.NewID(), Name: name, KeyHash: hash, Scope: scope}
 	if err := s.store.CreateAPIKey(r.Context(), k); err != nil {
 		if errors.Is(err, store.ErrKeyExists) {
 			// Astronomically unlikely hash collision; ask the user to retry.
@@ -107,11 +134,52 @@ func (s *Server) handleAPIKeyCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := settingsData{
-		CSRFToken: s.auth.IssueCSRFToken(),
-		NewKey:    token,
+		CSRFToken:   s.auth.IssueCSRFToken(),
+		NewKey:      token,
+		NewKeyScope: string(scope),
+		NewKeyMCP:   scope.AllowsMCP(),
 	}
 	s.loadAPIKeys(r, &data)
+	if data.NewKeyMCP {
+		data.MCPClaudeCommand, data.MCPJSONConfig, data.MCPBridgeCommand = mcpSnippets(data.MCPURL, s.baseURL(r), token)
+	}
 	s.rd.render(w, http.StatusOK, "settings.html", data)
+}
+
+// baseURL is the instance's public base URL: APP_URL when configured,
+// otherwise derived from the request (honouring X-Forwarded-Proto).
+func (s *Server) baseURL(r *http.Request) string {
+	if s.cfg.AppURL != "" {
+		return s.cfg.AppURL
+	}
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
+// mcpURL is the absolute URL of the MCP endpoint.
+func (s *Server) mcpURL(r *http.Request) string { return s.baseURL(r) + mcpPath }
+
+// mcpSnippets builds copy-paste client setup for a freshly created token: a
+// Claude Code command (remote HTTP), a generic JSON config, and the local stdio
+// bridge (which adds upload_local_path).
+func mcpSnippets(mcpURL, baseURL, token string) (claudeCmd, jsonCfg, bridgeCmd string) {
+	claudeCmd = fmt.Sprintf(`claude mcp add --transport http paperplane %s --header "Authorization: Bearer %s"`, mcpURL, token)
+	cfg := map[string]any{
+		"mcpServers": map[string]any{
+			"paperplane": map[string]any{
+				"type":    "http",
+				"url":     mcpURL,
+				"headers": map[string]string{"Authorization": "Bearer " + token},
+			},
+		},
+	}
+	b, _ := json.MarshalIndent(cfg, "", "  ")
+	jsonCfg = string(b)
+	bridgeCmd = fmt.Sprintf(`claude mcp add paperplane-local -e PAPERPLANE_URL=%s -e PAPERPLANE_TOKEN=%s -- paperplane mcp`, baseURL, token)
+	return claudeCmd, jsonCfg, bridgeCmd
 }
 
 // handleAPIKeyDelete revokes (deletes) an API key by id. Registered for POST
@@ -160,15 +228,15 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !auth.VerifyPassword(hash, current) {
-		s.renderSettingsError(w, "Current password is incorrect.")
+		s.renderSettingsError(w, r, "Current password is incorrect.")
 		return
 	}
 	if msg := validateNewPassword(newPw, confirm); msg != "" {
-		s.renderSettingsError(w, msg)
+		s.renderSettingsError(w, r, msg)
 		return
 	}
 	if auth.VerifyPassword(hash, newPw) {
-		s.renderSettingsError(w, "New password must be different from the current password.")
+		s.renderSettingsError(w, r, "New password must be different from the current password.")
 		return
 	}
 
@@ -197,9 +265,11 @@ func validateNewPassword(newPw, confirm string) string {
 
 // renderSettingsError re-renders the settings form with an error (HTTP 200) and
 // a fresh CSRF token.
-func (s *Server) renderSettingsError(w http.ResponseWriter, msg string) {
-	s.rd.render(w, http.StatusOK, "settings.html", settingsData{
+func (s *Server) renderSettingsError(w http.ResponseWriter, r *http.Request, msg string) {
+	data := settingsData{
 		CSRFToken: s.auth.IssueCSRFToken(),
 		Error:     msg,
-	})
+	}
+	s.loadAPIKeys(r, &data)
+	s.rd.render(w, http.StatusOK, "settings.html", data)
 }

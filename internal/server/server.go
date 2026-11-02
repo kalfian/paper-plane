@@ -139,6 +139,15 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("PUT /api/v1/projects/{id}/files/{path...}", apiKey(s.handleAPIFilePut))
 	mux.Handle("DELETE /api/v1/projects/{id}/files/{path...}", apiKey(s.handleAPIFileDelete))
 
+	// MCP endpoint (Model Context Protocol, stateless Streamable HTTP). Bearer
+	// auth with an MCP-scoped key. Only POST carries messages; GET/DELETE are
+	// answered with 405 by the handler. Methods are explicit so the patterns stay
+	// more specific than the "GET /" site fallback.
+	mcpH := s.mcpHandler()
+	mux.Handle("POST "+mcpPath, mcpH)
+	mux.Handle("GET "+mcpPath, mcpH)
+	mux.Handle("DELETE "+mcpPath, mcpH)
+
 	// Fallback: everything else is a static-site request resolved by slug. The
 	// /_app/* patterns above are more specific and take precedence.
 	mux.HandleFunc("GET /", s.handleServeSite)

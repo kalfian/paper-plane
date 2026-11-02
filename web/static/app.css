@@ -191,6 +191,12 @@ code {
   border-radius: var(--radius-sm);
 }
 
+/* The hidden attribute must beat component display values (.btn is
+   inline-flex), so controls that app.js reveals stay hidden until enhanced. */
+[hidden] {
+  display: none !important;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -593,6 +599,79 @@ code {
   tab-size: 2;
 }
 
+/* Readonly copy-me snippet (MCP client commands/config). Sized by its rows
+   attribute, or to its content where field-sizing is supported; long tokens and
+   URLs wrap inside the box instead of widening the page. Same recessed fill and
+   full ink as .input--mono[readonly]. */
+.textarea--snippet {
+  min-height: 0;
+  max-height: 320px;
+  field-sizing: content;
+  overflow-wrap: anywhere;
+}
+
+.textarea--snippet[readonly] {
+  background: var(--surface-2);
+  cursor: text;
+}
+
+/* Native select on the .input skin; keeps the platform arrow. */
+.select {
+  cursor: pointer;
+}
+
+/* Static code to copy (CLI commands). Matches the readonly snippet fields. */
+.code-block {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.code-block code {
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Label + copy button above a copyable field. The label wraps rather than
+   pushing the button onto its own line at narrow widths. */
+.snippet__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.snippet__head .label {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.snippet__head .btn {
+  flex: none;
+}
+
+/* Copy buttons hold their width across Copy -> Copied; success ink confirms. */
+.btn[data-copy] {
+  min-width: 4.75rem;
+}
+
+.btn.is-copied {
+  --btn-fg: var(--success-fg);
+  --btn-border: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
 .hint {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-xs);
@@ -844,6 +923,59 @@ code {
   border-top: 1px solid var(--border);
 }
 
+/* The one-time token reveal (+ MCP client snippets) above the tokens table. */
+.key-reveal {
+  margin-bottom: var(--sp-5);
+}
+
+/* A titled group inside a card, divided by the same hairline as .key-create. */
+.subsection {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+.subsection-title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--sp-2);
+}
+
+/* Explanatory lead text under a card/subsection title, spaced from content. */
+.hint--intro {
+  margin: 0 0 var(--sp-4);
+}
+
+/* Term/description pairs (MCP transport, auth, tools). Two columns on wide
+   screens, stacked on narrow ones (see Responsive). */
+.spec-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-3) var(--sp-5);
+  margin: var(--sp-5) 0 0;
+  font-size: var(--fs-sm);
+}
+
+.spec-list dt {
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+}
+
+.spec-list dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+}
+
+.tool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 /* ---------- Alerts ---------- */
 .alert {
   display: flex;
@@ -922,8 +1054,24 @@ code {
   display: none;
 }
 
+/* Access-token scope: categorical, not a status, so neutral and dot-less. */
+.badge--scope {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+  white-space: nowrap;
+}
+
+.badge--scope::before {
+  display: none;
+}
+
 /* ---------- Tables ---------- */
+/* position: relative makes the wrapper the containing block for absolutely
+   positioned .visually-hidden cells, so they scroll with the table instead of
+   escaping it and widening the page on narrow screens. */
 .table-wrap {
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1092,6 +1240,20 @@ code {
     padding-right: var(--sp-4);
   }
 
+  /* Brand + nav + Log out fit a 360px screen: tighter gaps, and the logout
+     form takes the free space itself instead of a spacer plus two gaps. */
+  .app-header__inner {
+    gap: var(--sp-3);
+  }
+
+  .app-header__spacer {
+    display: none;
+  }
+
+  .app-header__inner > form {
+    margin-left: auto;
+  }
+
   .page-head {
     flex-direction: column;
     align-items: stretch;
@@ -1103,5 +1265,14 @@ code {
 
   .app-nav a {
     padding: var(--sp-1) var(--sp-2);
+  }
+
+  .spec-list {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--sp-1);
+  }
+
+  .spec-list dd + dt {
+    margin-top: var(--sp-3);
   }
 }

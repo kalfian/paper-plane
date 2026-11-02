@@ -10,8 +10,13 @@
 // Autofill: on the new-project form, staging a single HTML file fills the Name
 // and Slug fields from the file name, unless the user has typed there already.
 //
+// Copy buttons: a [data-copy="<id>"] button copies the value (input/textarea)
+// or text (pre/code) of the element with that id. Buttons ship `hidden` and
+// are revealed here, so without JavaScript the readonly field (select on focus)
+// is the copy path. See initCopy for the fallback chain.
+//
 // Init runs on DOMContentLoaded and after every htmx swap, guarded so each
-// dropzone is wired exactly once.
+// dropzone / copy button is wired exactly once.
 (function () {
   "use strict";
 
@@ -232,6 +237,89 @@
     refresh();
   }
 
+  // ---------- Copy to clipboard ----------
+
+  var isMac = /Mac|iPhone|iPad/.test(navigator.platform || "");
+
+  function isField(el) {
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA";
+  }
+
+  function selectText(el) {
+    if (isField(el)) {
+      el.focus();
+      el.select();
+      return;
+    }
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  // legacyCopy is for plain-http instances, where navigator.clipboard is
+  // unavailable (it needs a secure context). On success focus returns to the
+  // button; on failure the text stays selected so Ctrl/Cmd+C finishes the job.
+  function legacyCopy(el, btn) {
+    var ok = false;
+    selectText(el);
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    if (ok) {
+      if (!isField(el)) window.getSelection().removeAllRanges();
+      btn.focus();
+    }
+    return ok;
+  }
+
+  // announce writes to the page's polite live region. Clearing first makes a
+  // repeated identical message (copying twice) be read again.
+  function announce(msg) {
+    var region = document.querySelector("[data-copy-status]");
+    if (!region) return;
+    region.textContent = "";
+    setTimeout(function () { region.textContent = msg; }, 50);
+  }
+
+  function initCopy(btn) {
+    var target = document.getElementById(btn.getAttribute("data-copy"));
+    if (!target) return; // leave the button hidden: nothing to copy
+    var label = btn.querySelector("[data-copy-label]") || btn;
+    var original = label.textContent;
+    var name = btn.getAttribute("data-copy-name") || "Text";
+    var timer = null;
+
+    function settle(ok) {
+      clearTimeout(timer);
+      btn.classList.toggle("is-copied", ok);
+      if (ok) {
+        label.textContent = "Copied";
+        announce(name + " copied to clipboard.");
+      } else {
+        label.textContent = isMac ? "Press ⌘C" : "Press Ctrl+C";
+        announce("Couldn't copy automatically. " + name + " is selected; press " +
+          (isMac ? "Command+C" : "Control+C") + " to copy it.");
+      }
+      timer = setTimeout(function () {
+        label.textContent = original;
+        btn.classList.remove("is-copied");
+      }, ok ? 2000 : 4000);
+    }
+
+    btn.addEventListener("click", function () {
+      var text = isField(target) ? target.value : target.textContent;
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(
+          function () { settle(true); },
+          function () { settle(legacyCopy(target, btn)); }
+        );
+      } else {
+        settle(legacyCopy(target, btn));
+      }
+    });
+    btn.hidden = false;
+  }
+
   function initAll(root) {
     var zones = (root || document).querySelectorAll("[data-dropzone]");
     if (zones.length) installGlobalDropGuard();
@@ -240,6 +328,11 @@
       zone.dataset.dzReady = "1";
       initDropzone(zone);
       if (zone.hasAttribute("data-autofill")) initAutofill(zone);
+    });
+    (root || document).querySelectorAll("[data-copy]").forEach(function (btn) {
+      if (btn.dataset.copyReady === "1") return;
+      btn.dataset.copyReady = "1";
+      initCopy(btn);
     });
   }
 

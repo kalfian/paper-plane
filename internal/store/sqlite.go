@@ -200,10 +200,16 @@ func (s *SQLite) CreateAPIKey(ctx context.Context, k *model.APIKey) error {
 	now := s.now().UTC()
 	k.CreatedAt = now
 	k.LastUsedAt = nil
+	if k.Scope == "" {
+		k.Scope = model.ScopeAll
+	}
+	if !k.Scope.Valid() {
+		return fmt.Errorf("invalid key scope %q", k.Scope)
+	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO api_keys (id, name, key_hash, created_at, last_used_at)
-		 VALUES (?, ?, ?, ?, NULL)`,
-		k.ID, k.Name, k.KeyHash, now.Format(timeLayout),
+		`INSERT INTO api_keys (id, name, key_hash, scope, created_at, last_used_at)
+		 VALUES (?, ?, ?, ?, ?, NULL)`,
+		k.ID, k.Name, k.KeyHash, string(k.Scope), now.Format(timeLayout),
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -260,19 +266,21 @@ func (s *SQLite) DeleteAPIKey(ctx context.Context, id string) error {
 	return requireOneRow(res)
 }
 
-const selectAPIKey = `SELECT id, name, key_hash, created_at, last_used_at FROM api_keys`
+const selectAPIKey = `SELECT id, name, key_hash, scope, created_at, last_used_at FROM api_keys`
 
 // scanAPIKey reads the api_keys columns in selectAPIKey order. last_used_at is
 // nullable and mapped to a *time.Time (nil when NULL).
 func scanAPIKey(sc rowScanner) (*model.APIKey, error) {
 	var (
 		k          model.APIKey
+		scope      string
 		createdStr string
 		lastUsed   sql.NullString
 	)
-	if err := sc.Scan(&k.ID, &k.Name, &k.KeyHash, &createdStr, &lastUsed); err != nil {
+	if err := sc.Scan(&k.ID, &k.Name, &k.KeyHash, &scope, &createdStr, &lastUsed); err != nil {
 		return nil, err
 	}
+	k.Scope = model.KeyScope(scope)
 	var err error
 	if k.CreatedAt, err = time.Parse(timeLayout, createdStr); err != nil {
 		return nil, fmt.Errorf("parse created_at: %w", err)

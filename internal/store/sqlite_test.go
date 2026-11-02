@@ -269,3 +269,27 @@ func TestAPIKeyCRUD(t *testing.T) {
 		t.Fatalf("GetAPIKeyByHash after delete err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestAPIKeyScope(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	def := &model.APIKey{ID: NewID(), Name: "default", KeyHash: "h1"}
+	if err := s.CreateAPIKey(ctx, def); err != nil {
+		t.Fatal(err)
+	}
+	mcpKey := &model.APIKey{ID: NewID(), Name: "mcp", KeyHash: "h2", Scope: model.ScopeMCP}
+	if err := s.CreateAPIKey(ctx, mcpKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateAPIKey(ctx, &model.APIKey{ID: NewID(), Name: "bad", KeyHash: "h3", Scope: "root"}); err == nil {
+		t.Fatal("invalid scope accepted")
+	}
+
+	for hash, want := range map[string]model.KeyScope{"h1": model.ScopeAll, "h2": model.ScopeMCP} {
+		k, err := s.GetAPIKeyByHash(ctx, hash)
+		if err != nil || k.Scope != want {
+			t.Fatalf("GetAPIKeyByHash(%s) = %+v, %v; want scope %s", hash, k, err, want)
+		}
+	}
+}

@@ -62,17 +62,32 @@ redirects `303` to `/_app/`. `GET /_app/login` redirects here while no password
 is configured.
 
 ### `GET /_app/settings` → `settings.html`
-Authenticated account settings: a **change password** form and an **API keys**
-section (create / list / revoke keys for the REST API). Data `settingsData`:
+Authenticated account settings, three cards: **change password**, **access
+tokens** (create / list / revoke scoped tokens for the REST API and/or MCP), and
+**MCP server** (endpoint, transport, auth, tool list, CLI token commands). Data
+`settingsData`:
 
-| Field       | Type            | Notes                                                        |
-|-------------|-----------------|--------------------------------------------------------------|
-| `CSRFToken` | string          | Hidden `csrf_token` input.                                   |
-| `Flash`     | string          | Optional success message (from `?flash=`).                  |
-| `Error`     | string          | Optional error message (change-password / general).         |
-| `APIKeys`   | []apiKeyView    | Existing keys: `ID`, `Name`, `CreatedAt`, `LastUsedAt` (*time.Time, nil = never used). Never carries plaintext. |
-| `NewKey`    | string          | A freshly-created **plaintext** token, shown exactly once (only on the create response). Empty otherwise. |
-| `KeyError`  | string          | Optional error specific to the API keys section.            |
+| Field              | Type         | Notes                                                        |
+|--------------------|--------------|--------------------------------------------------------------|
+| `CSRFToken`        | string       | Hidden `csrf_token` input.                                   |
+| `Flash`            | string       | Optional success message (from `?flash=`).                  |
+| `Error`            | string       | Optional error message (change-password / general).         |
+| `APIKeys`          | []apiKeyView | Existing tokens: `ID`, `Name`, `Scope` (`"all"`\|`"api"`\|`"mcp"`), `ScopeLabel` (`"REST API + MCP"`\|`"REST API only"`\|`"MCP only"`, shown as a `.badge--scope`), `CreatedAt`, `LastUsedAt` (*time.Time, nil = never used). Never carries plaintext. |
+| `NewKey`           | string       | A freshly-created **plaintext** token, shown exactly once (only on the create response). Empty otherwise. |
+| `NewKeyScope`      | string       | Scope of `NewKey` (`"all"`\|`"api"`\|`"mcp"`). Empty when `NewKey` is. Not rendered today. |
+| `NewKeyMCP`        | bool         | True when `NewKey`'s scope allows MCP; shows the "Connect an MCP client" block. |
+| `KeyError`         | string       | Optional error specific to the access tokens section.        |
+| `MCPURL`           | string       | Absolute MCP endpoint URL. **Always set** (the MCP card is always visible). |
+| `MCPClaudeCommand` | string       | `claude mcp add …` command embedding `NewKey`. Non-empty only when `NewKeyMCP`. |
+| `MCPJSONConfig`    | string       | Multi-line JSON client config embedding `NewKey` (`.mcp.json` / Claude Desktop / Cursor). Non-empty only when `NewKeyMCP`. |
+| `MCPBridgeCommand` | string       | Command that runs the local stdio bridge (`paperplane` binary) against this instance with `NewKey`. Non-empty only when `NewKeyMCP`. |
+
+The `MCP*` snippet strings are rendered as text inside readonly `<textarea>`s
+(auto-escaped, never as HTML). Copy buttons are `[data-copy="<element id>"]`
+with `data-copy-name` (used in the announcement) and a `[data-copy-label]` span;
+they ship `hidden` and `app.js` reveals them, announcing results through the
+page's `[data-copy-status]` live region. Without JS each value stays in a
+readonly field that selects itself on focus.
 
 **Change password** — form POSTs to `/_app/settings/password` with fields:
 - `current_password` (text, required; must match the stored hash)
@@ -84,12 +99,19 @@ On success: redirect `303` to `/_app/settings?flash=Password+updated.` (the
 current session stays valid — the cookie secret is not rotated). On failure:
 re-render (HTTP 200) with `Error`; passwords are never echoed back.
 
-**API keys** — two forms:
-- Create: POST `/_app/settings/api-keys` with `name` (text, required, ≤60 chars)
-  + `csrf_token`. On success re-renders (HTTP 200) with `NewKey` set to the
-  plaintext token (shown once; only the SHA-256 hash is stored).
+**Access tokens** — two forms (routes keep their `api-keys` names):
+- Create: POST `/_app/settings/api-keys` with `name` (text, required, ≤60 chars),
+  `scope` (select: `all` = REST API + MCP, the default; `api` = REST API only;
+  `mcp` = MCP only) + `csrf_token`. On success re-renders (HTTP 200) with
+  `NewKey` set to the plaintext token (shown once; only the SHA-256 hash is
+  stored), plus `NewKeyScope` / `NewKeyMCP` and, for MCP-capable scopes, the
+  three `MCP*` snippets.
 - Revoke: POST `/_app/settings/api-keys/{id}/delete` with `csrf_token`. Redirects
   `303` to `/_app/settings` with a flash.
+
+Tokens can also be minted from the CLI: `paperplane token create --name <name>
+--scope mcp` (Docker: `docker compose exec paperplane /paperplane token create
+--name claude --scope mcp`); the MCP card shows both commands.
 
 ## Handlers → templates (implemented in Phases 3 & 5)
 

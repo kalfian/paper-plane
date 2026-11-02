@@ -26,10 +26,15 @@ Authorization: Bearer pp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ### Getting a key
 
-API keys are created in the admin UI: **Settings → API keys → Create key**. The
-plaintext key is shown **exactly once** at creation — copy it immediately. Only a
-SHA-256 hash is stored; the key cannot be recovered later. Revoke a key any time
-from the same page.
+API keys are created in the admin UI: **Settings → Access tokens → Create
+token**, or on the server with `paperplane token create --name <name> [--scope
+all|api|mcp]`. The plaintext key is shown **exactly once** at creation — copy it
+immediately. Only a SHA-256 hash is stored; the key cannot be recovered later.
+Revoke a key any time from the same page (or `paperplane token revoke <id>`).
+
+Each key has a scope: `all` (REST API + MCP, the default), `api` (REST API
+only), or `mcp` (MCP only — see [MCP.md](MCP.md)). A key whose scope excludes
+the REST API gets `403 forbidden`.
 
 > Keys are intentionally **not** creatable through the API itself, to avoid
 > privilege escalation: an existing key cannot mint new keys.
@@ -40,6 +45,12 @@ Missing/invalid keys return `401`:
 
 ```json
 { "error": { "code": "unauthorized", "message": "Invalid API key." } }
+```
+
+A valid key without REST API scope returns `403`:
+
+```json
+{ "error": { "code": "forbidden", "message": "This key is not allowed to use the REST API (scope: MCP only)." } }
 ```
 
 ---
@@ -119,6 +130,7 @@ API paths; its `slug` is the public URL segment (`/<slug>/`).
 | `status`     | string | `active` (served) or `unlinked` (returns 404).      |
 | `index_file` | string | Landing page filename served at the site root.      |
 | `site_url`   | string | Public path of the site.                            |
+| `url`        | string | Absolute site URL (only present when `APP_URL` is set). |
 | `file_count` | int    | Number of files.                                    |
 | `size`       | int    | Total file size in bytes.                           |
 | `created_at` / `updated_at` | string | RFC 3339 UTC timestamps.             |
