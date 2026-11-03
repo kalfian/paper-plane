@@ -32,6 +32,12 @@ const (
 	// DefaultCSRFTTL is how long a CSRF token stays valid.
 	DefaultCSRFTTL = 12 * time.Hour
 
+	// SiteCookieName is the signed cookie that unlocks one password-protected
+	// site. It is scoped to the site's path (/<slug>/), so each site has its own.
+	SiteCookieName = "pp_site"
+	// DefaultSiteTTL is how long a site unlock stays valid.
+	DefaultSiteTTL = 7 * 24 * time.Hour
+
 	purposeSession = "session"
 	purposeCSRF    = "csrf"
 )
@@ -136,6 +142,44 @@ func (m *Manager) VerifySessionRequest(r *http.Request) bool {
 		return false
 	}
 	return m.verifyToken(purposeSession, c.Value) == nil
+}
+
+// sitePurpose binds a site-unlock token to one project and to its current
+// password: the purpose embeds the project id and a fingerprint of the stored
+// password hash, so changing or removing the password invalidates every
+// outstanding unlock cookie, and a cookie for one site never opens another.
+func sitePurpose(projectID, passwordHash string) string {
+	fp := sha256.Sum256([]byte(passwordHash))
+	return "site:" + projectID + ":" + hex.EncodeToString(fp[:8])
+}
+
+// IssueSiteCookie returns a signed cookie that unlocks the password-protected
+// site at path (e.g. "/my-site/") for the project's current password. Secure is
+// set on TLS deployments, like the session cookie.
+func (m *Manager) IssueSiteCookie(r *http.Request, projectID, passwordHash, path string) *http.Cookie {
+	return &http.Cookie{
+		Name:     SiteCookieName,
+		Value:    m.issueToken(sitePurpose(projectID, passwordHash), DefaultSiteTTL),
+		Path:     path,
+		HttpOnly: true,
+		Secure:   m.secure || forwardedHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+		Expires:  m.now().Add(DefaultSiteTTL),
+		MaxAge:   int(DefaultSiteTTL / time.Second),
+	}
+}
+
+// VerifySiteRequest reports whether r carries a valid unlock cookie for the
+// project's current password.
+func (m *Manager) VerifySiteRequest(r *http.Request, projectID, passwordHash string) bool {
+	purpose := sitePurpose(projectID, passwordHash)
+	// Several pp_site cookies may arrive if paths nest; accept any valid one.
+	for _, c := range r.CookiesNamed(SiteCookieName) {
+		if m.verifyToken(purpose, c.Value) == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // IssueCSRFToken returns a fresh, signed CSRF token suitable for embedding in a

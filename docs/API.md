@@ -114,6 +114,7 @@ API paths; its `slug` is the public URL segment (`/<slug>/`).
   "slug": "marketing",
   "status": "active",
   "index_file": "index.html",
+  "password_protected": false,
   "site_url": "/marketing/",
   "file_count": 4,
   "size": 20481,
@@ -129,6 +130,7 @@ API paths; its `slug` is the public URL segment (`/<slug>/`).
 | `slug`       | string | URL segment, unique, lowercase `[a-z0-9-]`. Immutable after creation. |
 | `status`     | string | `active` (served) or `unlinked` (returns 404).      |
 | `index_file` | string | Landing page filename served at the site root.      |
+| `password_protected` | bool | `true` when visitors must enter a password. The password itself is never returned. |
 | `site_url`   | string | Public path of the site.                            |
 | `url`        | string | Absolute site URL (only present when `APP_URL` is set). |
 | `file_count` | int    | Number of files.                                    |
@@ -155,6 +157,7 @@ Body:
 | `name`   | yes      | Non-empty.                                       |
 | `slug`   | yes      | `^[a-z0-9][a-z0-9-]*$`, ≤63 chars, not reserved (`_app`, `api`, `healthz`, `static`, `assets`). |
 | `status` | no       | `active` (default) or `unlinked`.                |
+| `password` | no     | Visitor password, 1–72 bytes. Omit for a public site. |
 
 A placeholder `index.html` is created so the site serves immediately. Responds
 `201` with the project object.
@@ -179,6 +182,7 @@ Send only the fields you want to change (all optional):
 | `name`       | Non-empty when present.                                        |
 | `status`     | `active` or `unlinked`.                                        |
 | `index_file` | Must reference an existing file; `""` resets to `index.html`.  |
+| `password`   | Sets or changes the visitor password (1–72 bytes); `""` removes it. Changing it signs out visitors who already unlocked the site. |
 
 ```sh
 curl -s -X PATCH https://example.com/api/v1/projects/V1StGXR8_Z5j \
@@ -187,7 +191,8 @@ curl -s -X PATCH https://example.com/api/v1/projects/V1StGXR8_Z5j \
   -d '{"status":"unlinked"}'
 ```
 
-Responds `200` with the updated project.
+Responds `200` with the updated project. Validation (`422`) happens before any
+field is written, so a rejected request changes nothing.
 
 ### `DELETE /api/v1/projects/{id}` — delete
 

@@ -1,6 +1,8 @@
 {{/*
   project_edit.html — rename + manage a single project. Inherits layout.html.
-  Data: projectEditData{ CSRFToken, Project(projectView), Flash, Error }.
+  Data: projectEditData{ CSRFToken, Project(projectView), Flash, Error, PasswordError }.
+  Error is the page-level (rename form) error. PasswordError renders inline
+  under the password field (and focuses it) instead of in the page-level alert.
   The rename form is htmx-enhanced (redirects back to this same URL). The
   status/delete forms redirect to the project list, so they use native full
   navigation rather than swapping this page's main region.
@@ -23,6 +25,17 @@
         {{if .Project.Active}}<span class="badge badge--active">active</span>
         {{else}}<span class="badge badge--unlinked">unlinked</span>{{end}}
       </span>
+      {{if .Project.Protected}}
+      <span>
+        <span class="badge badge--lock">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+          password<span class="visually-hidden"> protected</span>
+        </span>
+      </span>
+      {{end}}
       <span><strong>{{.Project.FileCount}}</strong> files · <strong>{{.Project.SizeHuman}}</strong></span>
     </div>
   </div>
@@ -73,6 +86,60 @@
         {{end}}
       </div>
     </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card__body">
+    <h2 class="section-title">Password protection</h2>
+    {{if .Project.Protected}}
+    <p class="lock-status lock-status--on">
+      <svg class="lock-status__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <span><strong>Password protected.</strong> Visitors must enter the password
+        before any page or file loads. You stay signed in, so you are never asked.</span>
+    </p>
+    {{else}}
+    <p class="lock-status">
+      <svg class="lock-status__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span><strong>Public.</strong> Anyone with the link can view this site{{if not .Project.Active}}
+        once it is relinked{{end}}. Set a password to require one before any page or
+        file loads.</span>
+    </p>
+    {{end}}
+
+    <form id="site-password-form" method="POST" action="/_app/projects/{{.Project.ID}}/password">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field">
+        <label class="label" for="site-password">{{if .Project.Protected}}New password{{else}}Password{{end}}</label>
+        <input class="input" type="password" id="site-password" name="password"
+               required autocomplete="new-password"
+               aria-describedby="{{if .PasswordError}}site-password-error {{end}}site-password-hint"
+               {{if .PasswordError}}aria-invalid="true" autofocus{{end}}>
+        {{if .PasswordError}}<p class="field-error" id="site-password-error" role="alert">{{.PasswordError}}</p>{{end}}
+        <p class="hint" id="site-password-hint">
+          At least 1 character, up to 72 bytes.
+          {{if .Project.Protected}}Changing it signs out visitors who already unlocked the site.{{else}}You will not be asked for it while signed in.{{end}}
+        </p>
+      </div>
+    </form>
+    <div class="form-actions">
+      <button type="submit" form="site-password-form" class="btn btn--primary">
+        {{if .Project.Protected}}Change password{{else}}Set password{{end}}
+      </button>
+      {{if .Project.Protected}}
+      <form class="inline-form" method="POST" action="/_app/projects/{{.Project.ID}}/password/remove"
+            onsubmit="return confirm('Remove the password from “{{.Project.Name}}”? Anyone with the link will be able to view it.');">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn">Remove password</button>
+      </form>
+      {{end}}
+    </div>
   </div>
 </div>
 

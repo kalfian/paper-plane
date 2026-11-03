@@ -36,6 +36,7 @@ Typical flow: list_projects (or create_project) → upload content → open the 
 - To publish a whole folder at once, prefer upload_zip (a base64 .zip; relative paths are preserved), or upload_files for a handful of files.
 - If you are running through the local Paper Plane bridge, upload_local_path uploads files/folders straight from disk without base64.
 - The landing page is index.html unless update_project sets index_file.
+- A site can be password-protected (create_project/update_project "password", min 1 character; "" removes it). Projects report "password_protected"; the password itself is never returned.
 - delete_project and delete_file are permanent.`
 
 // mcpHandler builds the authenticated MCP HTTP handler.
@@ -112,14 +113,15 @@ func (s *Server) mcpTools() *mcp.Registry {
 		InputSchema: schema(`{"type": "object", "properties": {
 			"name": {"type": "string", "description": "Display name."},
 			"slug": {"type": "string", "description": "URL path segment, e.g. \"my-site\" → /my-site/. Immutable."},
-			"status": {"type": "string", "enum": ["active", "unlinked"], "description": "Default active. Unlinked sites return 404 to visitors."}
+			"status": {"type": "string", "enum": ["active", "unlinked"], "description": "Default active. Unlinked sites return 404 to visitors."},
+			"password": {"type": "string", "minLength": 1, "description": "Optional visitor password (min 1 character). Visitors must enter it to view the site; the signed-in admin is never asked."}
 		}, "required": ["name", "slug"], "additionalProperties": false}`),
 	}, func(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
-		var a struct{ Name, Slug, Status string }
+		var a struct{ Name, Slug, Status, Password string }
 		if err := mcp.DecodeArgs(args, &a); err != nil {
 			return nil, err
 		}
-		p, err := s.createProject(ctx, a.Name, a.Slug, a.Status)
+		p, err := s.createProject(ctx, a.Name, a.Slug, a.Status, a.Password)
 		if err != nil {
 			return nil, err
 		}
@@ -129,11 +131,12 @@ func (s *Server) mcpTools() *mcp.Registry {
 	reg.Add(mcp.Tool{
 		Name:        "update_project",
 		Title:       "Update project",
-		Description: "Rename a project, change its status (active/unlinked), or set its landing page (index_file; empty string resets to index.html). Only provided fields change.",
+		Description: "Rename a project, change its status (active/unlinked), set its landing page (index_file; empty string resets to index.html), or set/remove its visitor password (password; empty string removes it). Only provided fields change.",
 		InputSchema: schema(`{"type": "object", "properties": {` + projectRefProp + `,
 			"name": {"type": "string"},
 			"status": {"type": "string", "enum": ["active", "unlinked"]},
-			"index_file": {"type": "string", "description": "Path of an existing file to serve at the site root."}
+			"index_file": {"type": "string", "description": "Path of an existing file to serve at the site root."},
+			"password": {"type": "string", "description": "Visitor password (min 1 character); empty string removes protection. The signed-in admin is never asked."}
 		}, "required": ["project"], "additionalProperties": false}`),
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: mcp.Bool(true)},
 	}, func(ctx context.Context, args json.RawMessage) (*mcp.CallToolResult, error) {
@@ -142,6 +145,7 @@ func (s *Server) mcpTools() *mcp.Registry {
 			Name      *string `json:"name"`
 			Status    *string `json:"status"`
 			IndexFile *string `json:"index_file"`
+			Password  *string `json:"password"`
 		}
 		if err := mcp.DecodeArgs(args, &a); err != nil {
 			return nil, err
@@ -150,7 +154,7 @@ func (s *Server) mcpTools() *mcp.Registry {
 		if err != nil {
 			return nil, err
 		}
-		updated, err := s.updateProject(ctx, p, projectPatch{Name: a.Name, Status: a.Status, IndexFile: a.IndexFile})
+		updated, err := s.updateProject(ctx, p, projectPatch{Name: a.Name, Status: a.Status, IndexFile: a.IndexFile, Password: a.Password})
 		if err != nil {
 			return nil, err
 		}

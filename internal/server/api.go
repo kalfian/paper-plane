@@ -29,17 +29,19 @@ const maxAPIBody = 2*sitefs.DefaultMaxUploadBytes + (1 << 20)
 
 // apiProject is the JSON representation of a project returned by the API.
 type apiProject struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	Status    string    `json:"status"`
-	IndexFile string    `json:"index_file"`
-	SiteURL   string    `json:"site_url"`
-	URL       string    `json:"url,omitempty"` // absolute site URL; only when APP_URL is set
-	FileCount int       `json:"file_count"`
-	Size      int64     `json:"size"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	Status    string `json:"status"`
+	IndexFile string `json:"index_file"`
+	// PasswordProtected is true when visitors must enter a password.
+	PasswordProtected bool      `json:"password_protected"`
+	SiteURL           string    `json:"site_url"`
+	URL               string    `json:"url,omitempty"` // absolute site URL; only when APP_URL is set
+	FileCount         int       `json:"file_count"`
+	Size              int64     `json:"size"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // apiFile is the JSON representation of a single file entry (metadata only).
@@ -71,9 +73,10 @@ type apiError struct {
 
 // projectCreateReq is the POST /projects body.
 type projectCreateReq struct {
-	Name   string `json:"name"`
-	Slug   string `json:"slug"`
-	Status string `json:"status"`
+	Name     string `json:"name"`
+	Slug     string `json:"slug"`
+	Status   string `json:"status"`
+	Password string `json:"password"` // optional visitor password (min 1 char)
 }
 
 // projectUpdateReq is the PATCH /projects/{id} body. Pointer fields distinguish
@@ -82,6 +85,7 @@ type projectUpdateReq struct {
 	Name      *string `json:"name"`
 	Status    *string `json:"status"`
 	IndexFile *string `json:"index_file"`
+	Password  *string `json:"password"` // non-empty sets, "" removes
 }
 
 // fileWriteReq is the PUT /files/{path} body.
@@ -209,17 +213,18 @@ func (s *Server) toAPIProject(p model.Project) apiProject {
 		}
 	}
 	return apiProject{
-		ID:        p.ID,
-		Name:      p.Name,
-		Slug:      p.Slug,
-		Status:    string(p.Status),
-		IndexFile: p.EffectiveIndexFile(),
-		SiteURL:   "/" + p.Slug + "/",
-		URL:       s.absoluteSiteURL(p.Slug),
-		FileCount: count,
-		Size:      size,
-		CreatedAt: p.CreatedAt,
-		UpdatedAt: p.UpdatedAt,
+		ID:                p.ID,
+		Name:              p.Name,
+		Slug:              p.Slug,
+		Status:            string(p.Status),
+		IndexFile:         p.EffectiveIndexFile(),
+		PasswordProtected: p.Protected(),
+		SiteURL:           "/" + p.Slug + "/",
+		URL:               s.absoluteSiteURL(p.Slug),
+		FileCount:         count,
+		Size:              size,
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
@@ -278,7 +283,7 @@ func (s *Server) handleAPIProjectCreate(w http.ResponseWriter, r *http.Request) 
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	p, err := s.createProject(r.Context(), req.Name, req.Slug, req.Status)
+	p, err := s.createProject(r.Context(), req.Name, req.Slug, req.Status, req.Password)
 	if err != nil {
 		s.writeOpError(w, err)
 		return

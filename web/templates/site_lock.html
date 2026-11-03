@@ -1,0 +1,57 @@
+{{/*
+  site_lock.html — standalone visitor-facing unlock page (no admin shell).
+  Served with HTTP 401 at ANY path under /<slug>/ of a password-protected site,
+  so every asset URL here must be absolute (/_app/static/...).
+  Data: siteLockData{ CSRFToken, SiteName, Action, Next, Error }.
+  Visitor-facing: neutral copy, no Paper Plane / admin wording.
+*/}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="robots" content="noindex">
+  <title>Protected site · {{.SiteName}}</title>
+  <link rel="stylesheet" href="/_app/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2.5' y='7' width='11' height='8' rx='1.5' fill='%23288dcc'/><path d='M5 7V5a3 3 0 0 1 6 0v2' fill='none' stroke='%23288dcc' stroke-width='1.6'/></svg>">
+</head>
+<body>
+  <main class="login-page">
+    <div class="card login-card">
+      <div class="card__body">
+        <p class="site-lock__eyebrow">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          Protected site
+        </p>
+        <h1 class="login-title site-lock__name">{{.SiteName}}</h1>
+        <p class="login-sub">This site is password protected. Enter the password to continue.</p>
+
+        {{if .Error}}
+        <div class="alert alert--error" role="alert">
+          <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span id="site-lock-error">{{.Error}}</span>
+        </div>
+        {{end}}
+
+        <form method="POST" action="{{.Action}}">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <input type="hidden" name="next" value="{{.Next}}">
+          <div class="field">
+            <label class="label" for="site-password">Password</label>
+            <input class="input" type="password" id="site-password" name="password"
+                   autocomplete="current-password" required autofocus
+                   {{if .Error}}aria-invalid="true" aria-describedby="site-lock-error"{{end}}>
+          </div>
+          <button type="submit" class="btn btn--primary btn--block">Unlock</button>
+        </form>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

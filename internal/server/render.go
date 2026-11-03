@@ -58,8 +58,9 @@ var layoutPages = []string{
 
 // standalonePages render their own full document without the layout shell.
 // login and setup both render before authentication, so they carry no admin
-// chrome.
-var standalonePages = []string{"login.html", "setup.html"}
+// chrome. site_lock.html is the visitor-facing unlock page of a
+// password-protected site.
+var standalonePages = []string{"login.html", "setup.html", "site_lock.html"}
 
 // funcMap holds template helpers available to every page.
 var funcMap = template.FuncMap{

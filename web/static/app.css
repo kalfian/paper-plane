@@ -1066,6 +1066,30 @@ code {
   display: none;
 }
 
+/* Password-protected site: informational (accent), with a lock glyph in place
+   of the status dot. Visible text stays ("password"); the icon is decorative. */
+.badge--lock {
+  background: var(--accent-soft);
+  color: var(--accent-soft-fg);
+}
+
+.badge--lock::before {
+  display: none;
+}
+
+.badge--lock svg {
+  flex: none;
+}
+
+/* Status + lock badges side by side in a table cell. No wrapping: a wrapping
+   row lets auto table layout squeeze the column to one badge wide even when
+   there is room; narrow screens scroll the table (.table-wrap) instead. */
+.badge-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
 /* ---------- Tables ---------- */
 /* position: relative makes the wrapper the containing block for absolutely
    positioned .visually-hidden cells, so they scroll with the table instead of
@@ -1207,6 +1231,53 @@ code {
   color: var(--text-muted);
   font-size: var(--fs-sm);
   margin: 0 0 var(--sp-5);
+}
+
+/* Visitor unlock page (site_lock.html) reuses the login card; the eyebrow names
+   the gate, the site's own name is the heading (long names wrap, never widen). */
+.site-lock__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--accent);
+}
+
+.site-lock__eyebrow svg {
+  flex: none;
+}
+
+.site-lock__name {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Password protection card ---------- */
+/* One-line state readout above the password form: locked (accent glyph) or
+   public (faint open lock). */
+.lock-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.lock-status strong {
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+}
+
+.lock-status__icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-faint);
+}
+
+.lock-status--on .lock-status__icon {
+  color: var(--accent);
 }
 
 /* ---------- Utilities ---------- */

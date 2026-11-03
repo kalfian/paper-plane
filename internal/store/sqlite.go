@@ -72,9 +72,9 @@ func (s *SQLite) CreateProject(ctx context.Context, p *model.Project) error {
 	p.UpdatedAt = now
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (id, name, slug, status, index_file, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.Name, p.Slug, string(p.Status), p.IndexFile,
+		`INSERT INTO projects (id, name, slug, status, index_file, password_hash, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.Slug, string(p.Status), p.IndexFile, p.PasswordHash,
 		now.Format(timeLayout), now.Format(timeLayout),
 	)
 	if err != nil {
@@ -141,6 +141,19 @@ func (s *SQLite) SetIndexFile(ctx context.Context, id, filename string) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE projects SET index_file = ?, updated_at = ? WHERE id = ?`,
 		filename, s.now().UTC().Format(timeLayout), id,
+	)
+	if err != nil {
+		return err
+	}
+	return requireOneRow(res)
+}
+
+// SetProjectPassword stores the visitor-password hash ("" removes it) and
+// bumps updated_at. Returns ErrNotFound if the project is missing.
+func (s *SQLite) SetProjectPassword(ctx context.Context, id, passwordHash string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects SET password_hash = ?, updated_at = ? WHERE id = ?`,
+		passwordHash, s.now().UTC().Format(timeLayout), id,
 	)
 	if err != nil {
 		return err
@@ -295,7 +308,7 @@ func scanAPIKey(sc rowScanner) (*model.APIKey, error) {
 	return &k, nil
 }
 
-const selectProject = `SELECT id, name, slug, status, index_file, created_at, updated_at FROM projects`
+const selectProject = `SELECT id, name, slug, status, index_file, password_hash, created_at, updated_at FROM projects`
 
 // rowScanner is satisfied by both *sql.Row and *sql.Rows.
 type rowScanner interface {
@@ -318,7 +331,7 @@ func scanProject(sc rowScanner) (*model.Project, error) {
 		status             string
 		createdStr, updStr string
 	)
-	if err := sc.Scan(&p.ID, &p.Name, &p.Slug, &status, &p.IndexFile, &createdStr, &updStr); err != nil {
+	if err := sc.Scan(&p.ID, &p.Name, &p.Slug, &status, &p.IndexFile, &p.PasswordHash, &createdStr, &updStr); err != nil {
 		return nil, err
 	}
 	p.Status = model.Status(status)

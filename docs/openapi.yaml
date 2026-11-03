@@ -123,6 +123,10 @@ paths:
                 index_file:
                   type: string
                   description: Must reference an existing file; empty resets to index.html.
+                password:
+                  type: string
+                  maxLength: 72
+                  description: Visitor password (min 1 character); empty string removes it.
       responses:
         "200":
           description: The updated project.
@@ -268,6 +272,7 @@ components:
         slug: { type: string }
         status: { type: string, enum: [active, unlinked] }
         index_file: { type: string }
+        password_protected: { type: boolean, description: "Visitors must enter a password. The password is never returned." }
         site_url: { type: string }
         url: { type: string, description: "Absolute site URL; present only when APP_URL is set." }
         file_count: { type: integer }

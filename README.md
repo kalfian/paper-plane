@@ -24,6 +24,9 @@ directory. No CGO, no Node toolchain, no external services.
   resolve under the slug prefix.
 - **Unlink without delete** — `unlinked` projects return 404 to visitors while
   their files remain on disk; relink to restore.
+- **Per-site password** — optionally lock any site behind a visitor password
+  (minimum 1 character). Visitors see an unlock page; the signed-in admin is
+  never asked. Set it from the project page, the REST API, or MCP.
 - **Auth + CSRF** — global admin password (bcrypt), signed stateless session
   cookie, CSRF token on every mutation.
 - **REST API** — a JSON API under `/api/v1` for project + file CRUD, authenticated
@@ -299,6 +302,15 @@ assets.
 - **MCP local bridge** — `paperplane mcp` only reads local files inside its
   root (default: the directory it was started in), skips dot-files and
   symlinks by default, and never writes to the local disk.
+- **Site passwords** — stored as bcrypt hashes. A correct password sets a
+  signed `pp_site` cookie scoped to `/<slug>/` (7-day TTL, `HttpOnly`,
+  `SameSite=Lax`), bound to that project and its current password: changing or
+  removing the password signs every visitor out. Every path of a protected site,
+  assets included, answers `401` with the unlock page until then, and unlocked
+  responses are sent `Cache-Control: private` so a CDN never stores them. A
+  signed-in admin bypasses the prompt. The 1-character minimum is deliberate:
+  this keeps casual visitors out; it is not strong access control, and there is
+  no rate limit beyond bcrypt's cost.
 - **Upload guards** — zip-slip and path-traversal are rejected; uploads are
   capped at **50 MiB per request** and **500 entries per zip archive**.
 - **TLS** — Paper Plane does not terminate TLS. Put a reverse proxy (Caddy,
@@ -315,13 +327,13 @@ Current MVP (v1) limitations, per the [PRD](docs/PRD.md):
 - **Path-based only** — no subdomain or custom-domain routing per project.
 - **No build pipeline** — files are served exactly as uploaded; no site build,
   versioning, or rollback.
-- **No visitor auth** — served sites are public.
+- **Visitor auth is a shared password** — one password per site, no visitor
+  accounts.
 - Absolute/SPA asset paths are only partially handled by `<base>` injection.
 
 Planned:
 
-- **v1.1** — folder uploads (`webkitdirectory`), per-project visitor password
-  protection, slug rename with redirects.
+- **v1.1** — folder uploads (`webkitdirectory`), slug rename with redirects.
 - **v2** — subdomain routing, custom domains, multi-user.
 
 See [`docs/PRD.md`](docs/PRD.md) and [`docs/PLAN.md`](docs/PLAN.md) for full

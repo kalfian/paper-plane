@@ -50,6 +50,9 @@ type Store interface {
 	// SetIndexFile sets the project's landing-page filename (served at the site
 	// root). An empty filename resets it to the default. ErrNotFound if missing.
 	SetIndexFile(ctx context.Context, id, filename string) error
+	// SetProjectPassword stores the bcrypt hash of the site's visitor password;
+	// an empty hash removes the password. Returns ErrNotFound if missing.
+	SetProjectPassword(ctx context.Context, id, passwordHash string) error
 	// DeleteProject removes the project row. Returns ErrNotFound if missing.
 	DeleteProject(ctx context.Context, id string) error
 

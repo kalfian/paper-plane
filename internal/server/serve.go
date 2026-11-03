@@ -48,6 +48,12 @@ func (s *Server) handleServeSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Password-protected site: every path (pages and assets) is gated.
+	if !s.siteUnlocked(r, proj) {
+		s.renderSiteLock(w, proj, r.URL.RequestURI(), "", http.StatusUnauthorized)
+		return
+	}
+
 	s.serveSiteFile(w, r, proj, rest)
 }
 
@@ -108,7 +114,12 @@ func (s *Server) serveSiteFile(w http.ResponseWriter, r *http.Request, proj *mod
 	if ctype := mime.TypeByExtension(ext); ctype != "" {
 		w.Header().Set("Content-Type", ctype)
 	}
-	w.Header().Set("Cache-Control", cacheControlFor(ext))
+	if proj.Protected() {
+		// Never let a shared cache (CDN, proxy) keep a protected site's bytes.
+		w.Header().Set("Cache-Control", "private, no-cache")
+	} else {
+		w.Header().Set("Cache-Control", cacheControlFor(ext))
+	}
 
 	http.ServeContent(w, r, path.Base(relpath), info.ModTime(), bytes.NewReader(data))
 }

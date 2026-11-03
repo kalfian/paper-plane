@@ -59,6 +59,7 @@ type projectView struct {
 	SizeHuman string
 	SiteURL   string // path to the live site, e.g. "/<slug>/"
 	IndexFile string // filename served at the site root
+	Protected bool   // visitors need a password to view the site
 	UpdatedAt time.Time
 }
 
@@ -80,10 +81,11 @@ type projectNewData struct {
 
 // projectEditData is passed to project_edit.html.
 type projectEditData struct {
-	CSRFToken string
-	Project   projectView
-	Flash     string
-	Error     string
+	CSRFToken     string
+	Project       projectView
+	Flash         string
+	Error         string // page-level error (rename form)
+	PasswordError string // inline error for the password-protection form
 }
 
 // newProjectView builds a projectView, computing file count and size.
@@ -107,6 +109,7 @@ func (s *Server) newProjectView(p model.Project) projectView {
 		SizeHuman: humanBytes(size),
 		SiteURL:   "/" + p.Slug + "/",
 		IndexFile: p.EffectiveIndexFile(),
+		Protected: p.Protected(),
 		UpdatedAt: p.UpdatedAt,
 	}
 }

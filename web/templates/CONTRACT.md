@@ -135,7 +135,9 @@ Project list. Data `projectsData`:
 `projectView` fields: `ID` (string), `Name` (string), `Slug` (string),
 `Status` (string: "active"|"unlinked"), `Active` (bool), `FileCount` (int),
 `Size` (int64, bytes), `SizeHuman` (string, e.g. "1.2 KB"), `SiteURL` (string,
-e.g. "/demo/"), `UpdatedAt` (time.Time).
+e.g. "/demo/"), `UpdatedAt` (time.Time), `Protected` (bool: visitors must enter
+a password to view the site; rendered as a `.badge--lock` "password" badge next
+to the status badge, inside a `.badge-row`).
 
 Forms on this page (all POST, all need `csrf_token`):
 - `/_app/projects/{id}/unlink`, `/_app/projects/{id}/relink`,
@@ -178,9 +180,56 @@ Rename form (slug is immutable in MVP). Data `projectEditData`:
 | `CSRFToken` | string      | Hidden `csrf_token` input.         |
 | `Project`   | projectView | The project being edited.          |
 | `Flash`     | string      | Optional success message.          |
-| `Error`     | string      | Optional error message.            |
+| `Error`     | string      | Optional page-level error (rename form). |
+| `PasswordError` | string  | Optional inline error for the password form. |
 
 Form POSTs to `/_app/projects/{id}` with `name` (text, required), `csrf_token`.
+
+**Password protection** card (between Details and Visibility & removal). Both
+forms are plain POSTs (no htmx), so password managers see a real submit:
+- Set / change: POST `/_app/projects/{id}/password` with `password` (password
+  input, required, `autocomplete="new-password"`; 1..72 **bytes**, not trimmed;
+  no `maxlength`, because a silently truncated paste would set a different
+  password than the one typed) + `csrf_token`. The button reads "Set password"
+  when `Project.Protected` is false, "Change password" when true. On success it
+  redirects `303` to `/_app/projects/{id}?flash=` with `Password set.` or
+  `Password changed.`. Changing the password signs out every visitor who
+  already unlocked the site. On validation failure it re-renders
+  `project_edit.html` (HTTP 200) with `PasswordError`; the password is never echoed back.
+- Remove (only when `Project.Protected`): POST `/_app/projects/{id}/password/remove`
+  with `csrf_token` (guarded by `confirm()`). Redirects `303` with flash
+  `Password removed.`.
+
+`PasswordError` shows inline under the password field (`.field-error`,
+`role="alert"`) and sets `aria-invalid` and autofocus on that field; it does
+**not** show the page-level alert or mark `name` invalid.
+
+### Visitor unlock: any `GET` under `/<slug>/` of a protected site → `site_lock.html` (standalone, public)
+When a site has a password, every request under `/<slug>/` (HTML and assets
+alike) is answered with this page and HTTP **401**, unless the visitor is
+signed in to the admin (never prompted) or holds that site's `pp_site` unlock
+cookie. The page is served at visitor URLs such as `/my-site/about.html`, so all
+of its asset links must be absolute (`/_app/static/...`). Visitor-facing copy:
+it never mentions the admin. Response headers: `Cache-Control: no-store`,
+`X-Robots-Tag: noindex`, `X-Frame-Options: DENY`. Data `siteLockData`:
+
+| Field       | Type   | Notes                                                     |
+|-------------|--------|-----------------------------------------------------------|
+| `CSRFToken` | string | Hidden `csrf_token` input.                                |
+| `SiteName`  | string | Project display name; the page heading.                   |
+| `Action`    | string | Form action, `/_app/unlock/<slug>`.                       |
+| `Next`      | string | Hidden `next` input: where to return after unlocking.     |
+| `Error`     | string | Optional; `Incorrect password.` after a wrong attempt.    |
+
+Form POSTs to `/_app/unlock/{slug}` (public, CSRF-protected) with fields:
+- `password` (password input, required, `autocomplete="current-password"`)
+- `next` (hidden; the server only honours a path inside `/<slug>/`, otherwise
+  the site root)
+- `csrf_token` (hidden)
+
+On success: sets the `pp_site` cookie (HMAC-signed, `Path=/<slug>/`, bound to
+the current password) and redirects `303` to `next`. On failure: re-renders
+`site_lock.html` with `Error` and HTTP 401. Unknown or unlinked slugs → 404.
 
 ### `GET /_app/projects/{id}/files` and `GET /_app/projects/{id}/files/edit?path=<rel>` → `files.html`
 File manager. The `edit` route additionally loads one text file into the editor.

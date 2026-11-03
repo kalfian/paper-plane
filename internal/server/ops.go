@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kalfian/paper-plane/internal/auth"
 	"github.com/kalfian/paper-plane/internal/model"
 	"github.com/kalfian/paper-plane/internal/sitefs"
 	"github.com/kalfian/paper-plane/internal/store"
@@ -125,8 +126,8 @@ func (s *Server) resolveProject(ctx context.Context, ref string) (*model.Project
 
 // createProject validates input, inserts the project row, creates its site
 // directory, and writes the placeholder index. It rolls the row back if the
-// directory cannot be created.
-func (s *Server) createProject(ctx context.Context, name, slug, status string) (*model.Project, error) {
+// directory cannot be created. A non-empty password protects the new site.
+func (s *Server) createProject(ctx context.Context, name, slug, status, password string) (*model.Project, error) {
 	name = strings.TrimSpace(name)
 	slug = strings.TrimSpace(slug)
 	if name == "" {
@@ -144,6 +145,17 @@ func (s *Server) createProject(ctx context.Context, name, slug, status string) (
 	}
 
 	p := &model.Project{ID: store.NewID(), Name: name, Slug: slug, Status: st}
+	if password != "" {
+		if err := validateSitePassword(password); err != nil {
+			return nil, err
+		}
+		hash, err := auth.HashPassword(password)
+		if err != nil {
+			s.log.Error("hash site password", "error", err)
+			return nil, errInternalOp
+		}
+		p.PasswordHash = hash
+	}
 	if err := s.store.CreateProject(ctx, p); err != nil {
 		if errors.Is(err, store.ErrSlugExists) {
 			return nil, &opError{Status: http.StatusConflict, Code: "slug_exists", Msg: "That slug is already in use."}
@@ -170,16 +182,24 @@ func (s *Server) createProject(ctx context.Context, name, slug, status string) (
 }
 
 // projectPatch carries optional project updates; nil fields are left unchanged.
+// Password: a non-empty value sets the visitor password, "" removes it.
 type projectPatch struct {
 	Name      *string
 	Status    *string
 	IndexFile *string
+	Password  *string
 }
 
 // updateProject applies the non-nil fields of patch to p and returns the
 // reloaded project. A non-empty index file must exist; empty resets it to the
 // default (index.html).
 func (s *Server) updateProject(ctx context.Context, p *model.Project, patch projectPatch) (*model.Project, error) {
+	// Validate the password before any write so a bad request changes nothing.
+	if patch.Password != nil && *patch.Password != "" {
+		if err := validateSitePassword(*patch.Password); err != nil {
+			return nil, err
+		}
+	}
 	if patch.Name != nil {
 		name := strings.TrimSpace(*patch.Name)
 		if name == "" {
@@ -209,6 +229,11 @@ func (s *Server) updateProject(ctx context.Context, p *model.Project, patch proj
 		if err := s.store.SetIndexFile(ctx, p.ID, idx); err != nil {
 			s.log.Error("set index file", "id", p.ID, "error", err)
 			return nil, errInternalOp
+		}
+	}
+	if patch.Password != nil {
+		if err := s.setSitePassword(ctx, p.ID, *patch.Password); err != nil {
+			return nil, err
 		}
 	}
 	updated, err := s.store.GetProject(ctx, p.ID)

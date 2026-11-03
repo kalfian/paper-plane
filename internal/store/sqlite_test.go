@@ -293,3 +293,42 @@ func TestAPIKeyScope(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectPassword(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	p := &model.Project{ID: NewID(), Name: "Locked", Slug: "locked", PasswordHash: "hash-a"}
+	if err := s.CreateProject(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetProjectBySlug(ctx, "locked")
+	if err != nil || got.PasswordHash != "hash-a" || !got.Protected() {
+		t.Fatalf("after create: %+v, %v", got, err)
+	}
+
+	if err := s.SetProjectPassword(ctx, p.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetProject(ctx, p.ID); got.Protected() {
+		t.Fatalf("password not cleared: %+v", got)
+	}
+	if err := s.SetProjectPassword(ctx, "missing", "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing project err = %v, want ErrNotFound", err)
+	}
+
+	// Projects without a password (incl. rows from before migration 0005) are public.
+	pub := &model.Project{ID: NewID(), Name: "Pub", Slug: "pub"}
+	if err := s.CreateProject(ctx, pub); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListProjects(ctx)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("ListProjects = %d, %v", len(list), err)
+	}
+	for _, lp := range list {
+		if lp.Protected() {
+			t.Fatalf("unexpected protected project %q", lp.Slug)
+		}
+	}
+}

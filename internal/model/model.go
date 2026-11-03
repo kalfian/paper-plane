@@ -25,14 +25,20 @@ func (s Status) Valid() bool {
 
 // Project is a single static site managed by Paper Plane.
 type Project struct {
-	ID        string    // nanoid, also used as the on-disk folder name
-	Name      string    // human-friendly display name
-	Slug      string    // URL path segment, unique, immutable in MVP
-	Status    Status    // active | unlinked
-	IndexFile string    // filename served at the site root (default "index.html")
-	CreatedAt time.Time // UTC
-	UpdatedAt time.Time // UTC
+	ID        string // nanoid, also used as the on-disk folder name
+	Name      string // human-friendly display name
+	Slug      string // URL path segment, unique, immutable in MVP
+	Status    Status // active | unlinked
+	IndexFile string // filename served at the site root (default "index.html")
+	// PasswordHash is the bcrypt hash of the visitor password, or "" when the
+	// site is public. Never exposed through the API.
+	PasswordHash string
+	CreatedAt    time.Time // UTC
+	UpdatedAt    time.Time // UTC
 }
+
+// Protected reports whether visitors need a password to view the site.
+func (p Project) Protected() bool { return p.PasswordHash != "" }
 
 // APIKey is an access token for the REST API and/or the MCP endpoint. Only
 // KeyHash (hex SHA-256 of the plaintext token) is persisted; the plaintext is

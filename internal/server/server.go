@@ -79,6 +79,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /_app/setup", s.handleSetupForm)
 	mux.Handle("POST /_app/setup", s.csrf(http.HandlerFunc(s.handleSetupSubmit)))
 
+	// Visitor unlock for password-protected sites (public, pre-auth).
+	mux.Handle("POST "+siteUnlockPathPrefix+"{slug}", chain(http.HandlerFunc(s.handleSiteUnlock), limitBody(maxUnlockBody), s.csrf))
+
 	// Authenticated admin pages (GET) and mutations (POST + CSRF).
 	get := func(h http.HandlerFunc) http.Handler { return chain(h, s.requireAuth) }
 	post := func(h http.HandlerFunc) http.Handler { return chain(h, s.requireAuth, s.csrf) }
@@ -99,6 +102,8 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /_app/projects/{id}/unlink", post(s.handleProjectUnlink))
 	mux.Handle("POST /_app/projects/{id}/relink", post(s.handleProjectRelink))
 	mux.Handle("POST /_app/projects/{id}/delete", post(s.handleProjectDelete))
+	mux.Handle("POST /_app/projects/{id}/password", post(s.handleProjectPassword))
+	mux.Handle("POST /_app/projects/{id}/password/remove", post(s.handleProjectPasswordRemove))
 
 	// File management.
 	mux.Handle("GET /_app/projects/{id}/files", get(s.handleFilesList))
