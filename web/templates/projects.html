@@ -1,14 +1,21 @@
 {{/*
   projects.html — project list. Inherits layout.html.
   Data: projectsData{ CSRFToken, Projects[]projectView, Flash, Error }.
+
+  Row actions are the frequent, reversible ones (open site, files, unlink /
+  relink). Deleting a project is irreversible, so it lives only in the danger
+  zone of the project page, behind a two-step confirmation that also works
+  without JavaScript. The table restacks into one card per project on narrow
+  screens (.table--stack); [data-label] names each value there.
 */}}
 {{define "title"}}Projects · Paper Plane{{end}}
+{{define "nav-projects"}} aria-current="page"{{end}}
 
 {{define "content"}}
 <div class="page-head">
   <div class="page-head__titles">
     <h1 class="page-title">Projects</h1>
-    <p class="page-subtitle">Static sites you host, served at <code>/&lt;slug&gt;/</code>.</p>
+    <p class="page-subtitle">Static sites you host, each served at <code>/&lt;slug&gt;/</code>.</p>
   </div>
   <div class="page-head__actions">
     <a class="btn btn--primary" href="/_app/projects/new">
@@ -20,33 +27,18 @@
   </div>
 </div>
 
-{{if .Flash}}
-<div class="alert alert--success" role="status">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  <span>{{.Flash}}</span>
-</div>
-{{end}}
-{{if .Error}}
-<div class="alert alert--error" role="alert">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>
-  <span>{{.Error}}</span>
-</div>
-{{end}}
+{{if .Flash}}{{template "alert-success" .Flash}}{{end}}
+{{if .Error}}{{template "alert-error" .Error}}{{end}}
 
 {{if .Projects}}
 <div class="table-wrap">
-  <table class="table">
+  <table class="table table--stack table--projects">
     <thead>
       <tr>
         <th scope="col">Name</th>
         <th scope="col">Status</th>
-        <th scope="col">Files</th>
-        <th scope="col">Size</th>
+        <th scope="col" class="num">Files</th>
+        <th scope="col" class="num">Size</th>
         <th scope="col">Updated</th>
         <th scope="col"><span class="visually-hidden">Actions</span></th>
       </tr>
@@ -54,14 +46,14 @@
     <tbody>
       {{range .Projects}}
       <tr>
-        <td>
+        <td class="cell-main">
           <a class="cell-name" href="/_app/projects/{{.ID}}">{{.Name}}</a>
-          <div class="muted"><code>{{.Slug}}</code></div>
+          <div class="cell-sub"><code>/{{.Slug}}/</code></div>
         </td>
-        <td>
+        <td class="cell-status">
           <div class="badge-row">
             {{if .Active}}
-            <span class="badge badge--active">active</span>
+            <span class="badge badge--active">live</span>
             {{else}}
             <span class="badge badge--unlinked">unlinked</span>
             {{end}}
@@ -76,34 +68,33 @@
             {{end}}
           </div>
         </td>
-        <td class="num">{{.FileCount}}</td>
-        <td class="num">{{.SizeHuman}}</td>
-        <td class="num"><time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.UpdatedAt.Format "2 Jan 2006, 15:04"}}</time></td>
-        <td>
+        <td class="num cell-meta" data-label="Files">{{.FileCount}}</td>
+        <td class="num cell-meta" data-label="Size">{{.SizeHuman}}</td>
+        <td class="num cell-meta cell-updated" data-label="Updated"><time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.UpdatedAt.Format "2 Jan 2006, 15:04"}}</time></td>
+        <td class="cell-actions">
           <div class="row-actions">
             {{if .Active}}
-            <a class="btn btn--ghost btn--sm" href="{{.SiteURL}}" target="_blank" rel="noopener">View</a>
+            <a class="btn btn--ghost btn--sm" href="{{.SiteURL}}" target="_blank" rel="noopener">
+              <span>Open<span class="visually-hidden"> {{.Name}} (new tab)</span></span>
+              <svg class="btn__trail" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M6 3.5H3.5v9h9V10M9 3.5h3.5V7M12.5 3.5 7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
             {{end}}
-            <a class="btn btn--ghost btn--sm" href="/_app/projects/{{.ID}}/files">Files</a>
+            <a class="btn btn--ghost btn--sm" href="/_app/projects/{{.ID}}/files">Files<span class="visually-hidden"> of {{.Name}}</span></a>
             {{if .Active}}
             <form class="inline-form" method="POST" action="/_app/projects/{{.ID}}/unlink"
                   hx-post="/_app/projects/{{.ID}}/unlink">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <button type="submit" class="btn btn--ghost btn--sm">Unlink</button>
+              <button type="submit" class="btn btn--ghost btn--sm">Unlink<span class="visually-hidden"> {{.Name}}</span></button>
             </form>
             {{else}}
             <form class="inline-form" method="POST" action="/_app/projects/{{.ID}}/relink"
                   hx-post="/_app/projects/{{.ID}}/relink">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <button type="submit" class="btn btn--ghost btn--sm">Relink</button>
+              <button type="submit" class="btn btn--ghost btn--sm">Relink<span class="visually-hidden"> {{.Name}}</span></button>
             </form>
             {{end}}
-            <form class="inline-form" method="POST" action="/_app/projects/{{.ID}}/delete"
-                  hx-post="/_app/projects/{{.ID}}/delete"
-                  hx-confirm="Delete “{{.Name}}” and all its files? This cannot be undone.">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <button type="submit" class="btn btn--danger btn--sm">Delete</button>
-            </form>
           </div>
         </td>
       </tr>
@@ -118,8 +109,8 @@
     <path d="M22 2 9 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
   </svg>
   <p class="empty__title">No projects yet</p>
-  <p class="empty__text">Create your first project, then upload a folder or a
-    <code>.zip</code> of your static site to publish it.</p>
+  <p class="empty__text">A project is one static site. Create one, then upload its
+    files or a <code>.zip</code> of the whole folder to publish it.</p>
   <a class="btn btn--primary" href="/_app/projects/new">New project</a>
 </div>
 {{end}}

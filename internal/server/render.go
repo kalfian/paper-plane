@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"path"
 
 	"github.com/kalfian/paper-plane/web"
 )
@@ -70,6 +71,26 @@ var funcMap = template.FuncMap{
 			return "Paper Plane"
 		}
 		return s + " · Paper Plane"
+	},
+	// pathDir returns the folder part of a slash-separated relative path with a
+	// trailing slash ("assets/css/" for "assets/css/site.css"), or "" for a
+	// file at the site root. The file manager shows it muted before the name.
+	"pathDir": func(p string) string {
+		d := path.Dir(p)
+		if d == "." || d == "/" {
+			return ""
+		}
+		return d + "/"
+	},
+	// pathBase returns the last element of a slash-separated relative path. The
+	// rename form prefills it, because renames change only the base name.
+	"pathBase": func(p string) string { return path.Base(p) },
+	// plural picks the singular or plural noun for a count ("1 file", "2 files").
+	"plural": func(n int, one, many string) string {
+		if n == 1 {
+			return one
+		}
+		return many
 	},
 }
 

@@ -13,6 +13,7 @@
   selects itself on focus, so copying still works by keyboard and mouse.
 */}}
 {{define "title"}}Settings · Paper Plane{{end}}
+{{define "nav-settings"}} aria-current="page"{{end}}
 
 {{define "content"}}
 <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -27,27 +28,12 @@
   </div>
 </div>
 
-{{if .Flash}}
-<div class="alert alert--success" role="status">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  <span>{{.Flash}}</span>
-</div>
-{{end}}
-{{if .Error}}
-<div class="alert alert--error" role="alert">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>
-  <span>{{.Error}}</span>
-</div>
-{{end}}
+{{if .Flash}}{{template "alert-success" .Flash}}{{end}}
 
-<div class="card">
+<section class="card" aria-labelledby="password-title">
   <div class="card__body">
-    <h2 class="section-title">Change password</h2>
+    <h2 class="section-title" id="password-title">Change password</h2>
+    {{if .Error}}{{template "alert-error" .Error}}{{end}}
     <form method="POST" action="/_app/settings/password"
           hx-post="/_app/settings/password">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -73,11 +59,11 @@
       </div>
     </form>
   </div>
-</div>
+</section>
 
-<div class="card">
+<section class="card" aria-labelledby="tokens-title">
   <div class="card__body">
-    <h2 class="section-title">Access tokens</h2>
+    <h2 class="section-title" id="tokens-title">Access tokens</h2>
     <p class="hint hint--intro">
       Access tokens authenticate requests to the REST API and the MCP server —
       send one as <code>Authorization: Bearer &lt;token&gt;</code>. A token's
@@ -85,15 +71,7 @@
       <a href="/api/v1">API reference</a>.
     </p>
 
-    {{if .KeyError}}
-    <div class="alert alert--error" role="alert">
-      <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      <span>{{.KeyError}}</span>
-    </div>
-    {{end}}
+    {{if .KeyError}}{{template "alert-error" .KeyError}}{{end}}
 
     {{if .NewKey}}
     <div class="key-reveal">
@@ -116,7 +94,7 @@
         <input class="input input--mono" type="text" id="new-api-key" value="{{.NewKey}}"
                readonly spellcheck="false" onfocus="this.select()" data-autofocus
                aria-describedby="new-api-key-hint">
-        <p class="hint" id="new-api-key-hint">Click to select, then copy.</p>
+        <p class="hint" id="new-api-key-hint">Paste it into your client now; only a hash is stored here.</p>
       </div>
 
       {{if .NewKeyMCP}}
@@ -177,7 +155,7 @@
 
     {{if .APIKeys}}
     <div class="table-wrap">
-      <table class="table">
+      <table class="table table--stack table--tokens">
         <thead>
           <tr>
             <th scope="col">Name</th>
@@ -190,18 +168,18 @@
         <tbody>
           {{range .APIKeys}}
           <tr>
-            <td class="cell-name">{{.Name}}</td>
-            <td><span class="badge badge--scope">{{.ScopeLabel}}</span></td>
-            <td class="num">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
-            <td class="num">{{if .LastUsedAt}}{{.LastUsedAt.Format "2006-01-02 15:04"}}{{else}}Never{{end}}</td>
-            <td>
+            <td class="cell-main"><span class="cell-name">{{.Name}}</span></td>
+            <td class="cell-status"><span class="badge badge--scope">{{.ScopeLabel}}</span></td>
+            <td class="num cell-meta" data-label="Created"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.CreatedAt.Format "2 Jan 2006, 15:04"}}</time></td>
+            <td class="num cell-meta" data-label="Last used">{{if .LastUsedAt}}<time datetime="{{.LastUsedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.LastUsedAt.Format "2 Jan 2006, 15:04"}}</time>{{else}}Never{{end}}</td>
+            <td class="cell-actions">
               <div class="row-actions">
                 <form class="inline-form" method="POST"
                       action="/_app/settings/api-keys/{{.ID}}/delete"
                       hx-post="/_app/settings/api-keys/{{.ID}}/delete"
                       hx-confirm="Revoke “{{.Name}}”? Any client using this token will stop working immediately.">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <button type="submit" class="btn btn--danger btn--sm">Revoke<span class="visually-hidden"> {{.Name}}</span></button>
+                  <button type="submit" class="btn btn--ghost btn--ghost-danger btn--sm">Revoke<span class="visually-hidden"> {{.Name}}</span></button>
                 </form>
               </div>
             </td>
@@ -223,12 +201,13 @@
     {{end}}
 
     <form class="key-create" method="POST" action="/_app/settings/api-keys"
-          hx-post="/_app/settings/api-keys">
+          hx-post="/_app/settings/api-keys" aria-labelledby="key-create-title">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <h3 class="subsection-title" id="key-create-title">Create a token</h3>
       <div class="field">
         <label class="label" for="key-name">Token name</label>
         <input class="input" type="text" id="key-name" name="name"
-               placeholder="e.g. ci-deploy" autocomplete="off" required
+               placeholder="e.g. ci-deploy" autocomplete="off" required maxlength="60"
                aria-describedby="key-name-hint" {{if .KeyError}}aria-invalid="true"{{end}}>
         <p class="hint" id="key-name-hint">A label to help you recognise this token later.</p>
       </div>
@@ -248,11 +227,11 @@
       </div>
     </form>
   </div>
-</div>
+</section>
 
-<div class="card">
+<section class="card" aria-labelledby="mcp-title">
   <div class="card__body">
-    <h2 class="section-title">MCP server</h2>
+    <h2 class="section-title" id="mcp-title">MCP server</h2>
     <p class="hint hint--intro">
       Let AI clients such as Claude Code, Claude Desktop or Cursor manage your
       projects and files over the Model Context Protocol.
@@ -315,7 +294,7 @@
             <span data-copy-label>Copy</span><span class="visually-hidden"> CLI command</span>
           </button>
         </div>
-        <pre class="code-block" id="cli-token-cmd"><code>paperplane token create --name &lt;name&gt; --scope mcp</code></pre>
+        <pre class="code-block" id="cli-token-cmd"><code>paperplane token create --name claude --scope mcp</code></pre>
       </div>
 
       <div class="field">
@@ -330,7 +309,7 @@
       </div>
     </section>
   </div>
-</div>
+</section>
 
 <p class="visually-hidden" role="status" data-copy-status></p>
 {{end}}

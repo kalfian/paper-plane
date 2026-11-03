@@ -2,9 +2,17 @@
   project_new.html — create form. Inherits layout.html.
   Data: projectNewData{ CSRFToken, Name, Slug, Error }.
   Native (non-htmx) submit: success redirects to the file manager (new context),
-  so a full navigation is the correct behaviour.
+  so a full navigation is the correct behaviour. app.js adds a busy state to
+  the submit button while the (possibly large) upload is sent.
+
+  Enhancements (app.js; the form works without them):
+  - [data-slug-source] / [data-slug-target]: the slug follows the name until
+    the user edits the slug themselves;
+  - [data-slug-preview]: shows the URL the slug will be served at;
+  - the dropzone stages files and offers "use this file name" (see CONTRACT.md).
 */}}
 {{define "title"}}New project · Paper Plane{{end}}
+{{define "nav-projects"}} aria-current="page"{{end}}
 
 {{define "content"}}
 <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -16,39 +24,39 @@
 <div class="page-head">
   <div class="page-head__titles">
     <h1 class="page-title">New project</h1>
-    <p class="page-subtitle">Name it, pick a slug, and optionally upload files now.</p>
+    <p class="page-subtitle">One project is one static site. Files are optional; you can upload them later.</p>
   </div>
 </div>
 
-{{if .Error}}
-<div class="alert alert--error" role="alert">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>
-  <span>{{.Error}}</span>
-</div>
-{{end}}
+{{if .Error}}{{template "alert-error" .Error}}{{end}}
 
 <div class="card">
   <div class="card__body">
-    <form method="POST" action="/_app/projects" enctype="multipart/form-data">
+    <form method="POST" action="/_app/projects" enctype="multipart/form-data" data-busy-label="Creating…">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
       <div class="field">
         <label class="label" for="name">Name</label>
         <input class="input" type="text" id="name" name="name" value="{{.Name}}"
-               placeholder="Marketing site" required autofocus autocomplete="off">
+               required autofocus autocomplete="off" data-slug-source
+               aria-describedby="name-hint">
+        <p class="hint" id="name-hint">Shown in this admin and on the unlock page if you add a password.</p>
       </div>
 
       <div class="field">
         <label class="label" for="slug">Slug</label>
-        <input class="input" type="text" id="slug" name="slug" value="{{.Slug}}"
-               placeholder="marketing-site" pattern="[a-z0-9][a-z0-9\-]*" maxlength="63"
-               required autocomplete="off" aria-describedby="slug-hint">
-        <p class="hint" id="slug-hint">Lowercase letters, digits, and hyphens; must
-          start with a letter or digit. Served at <code>/&lt;slug&gt;/</code>. Immutable after creation.</p>
-        <button type="button" class="btn btn--ghost btn--sm autofill-btn" data-autofill-btn hidden></button>
+        <div class="input-affix">
+          <span class="input-affix__prefix" aria-hidden="true">/</span>
+          <input class="input" type="text" id="slug" name="slug" value="{{.Slug}}"
+                 pattern="[a-z0-9][a-z0-9\-]*" maxlength="63"
+                 required autocomplete="off" autocapitalize="off" spellcheck="false"
+                 data-slug-target aria-describedby="slug-hint slug-preview">
+          <span class="input-affix__suffix" aria-hidden="true">/</span>
+        </div>
+        <p class="hint" id="slug-hint">Lowercase letters, digits and hyphens, starting
+          with a letter or digit. It becomes the site's URL and cannot be changed later.</p>
+        <p class="hint hint--preview" id="slug-preview" data-slug-preview hidden></p>
+        <button type="button" class="btn btn--sm autofill-btn" data-autofill-btn hidden></button>
       </div>
 
       <div class="field">
@@ -59,16 +67,17 @@
               <path d="M12 15V4m0 0L8 8m4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
             </svg>
-            <p class="dropzone__text"><strong>Drag &amp; drop</strong> files here, or <span class="dropzone__link">browse</span></p>
-            <p class="dropzone__hint" id="files-hint">Drop more anytime — files add up, and
-              you can remove any before creating. A single <code>.zip</code> is extracted
-              with its folder structure. A lone HTML file becomes the site's
-              <code>index.html</code>; use the button under Slug to copy its name into
-              Name &amp; Slug. Skip this and a placeholder <code>index.html</code> is created.</p>
+            <p class="dropzone__text">
+              <span class="dropzone__pointer"><strong>Drop files here</strong> or <span class="dropzone__link">browse</span></span>
+              <span class="dropzone__touch"><span class="dropzone__link">Choose files</span></span>
+            </p>
+            <p class="dropzone__hint" id="files-hint">Files land at the site root; a <code>.zip</code>
+              keeps its folders. Skip this to start with a placeholder page.</p>
             <input class="dropzone__input" type="file" id="files" name="files" multiple
-                   aria-describedby="files-hint" aria-label="Choose files to upload">
+                   aria-describedby="files-hint">
           </div>
           <div class="dropzone__files" data-dz-list hidden></div>
+          <p class="visually-hidden" role="status" data-dz-status></p>
         </div>
       </div>
 

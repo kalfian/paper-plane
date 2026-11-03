@@ -1,17 +1,27 @@
 {{/*
   files.html — file manager. Inherits layout.html.
   Data: filesData{ CSRFToken, Project, Files[]fileView, Editing, EditPath,
-                   EditContent, Flash, Error }.
+                   EditContent, Renaming, RenamePath, Flash, Error }.
 
   htmx: all interactions target/select #app-main (inherited from layout body).
-  - Upload / delete / save POST and follow the server's redirect back to this
-    page; htmx swaps the refreshed main region (no full reload).
-  - Edit / cancel are GETs that push the URL so the browser back button works.
+  - Upload / delete / save / rename / set-landing POST and follow the server's
+    redirect back to this page; htmx swaps the refreshed main region.
+  - Edit / rename / cancel are GETs that push the URL so the back button works.
   Every form also degrades to a native submit when JavaScript is unavailable.
+
+  The editor or rename card (when open) renders first, above the upload and the
+  list, so it is in view on load with or without JavaScript.
+
+  Enhancements (app.js; everything works without them):
+  - [data-file-filter]: revealed filter box for long lists;
+  - [data-upload-progress]: upload progress while an htmx upload is in flight;
+  - [data-editor]: unsaved-change guard, Ctrl/Cmd+S to save.
 */}}
 {{define "title"}}Files · {{.Project.Name}} · Paper Plane{{end}}
+{{define "nav-projects"}} aria-current="page"{{end}}
 
 {{define "content"}}
+{{- $hasIndex := false}}{{range .Files}}{{if .IsIndex}}{{$hasIndex = true}}{{end}}{{end -}}
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <a href="/_app/projects">Projects</a>
   <span class="breadcrumb__sep" aria-hidden="true">/</span>
@@ -24,181 +34,92 @@
   <div class="page-head__titles">
     <h1 class="page-title">Files</h1>
     <div class="meta-line">
-      <span><strong>{{.Project.FileCount}}</strong> files · <strong>{{.Project.SizeHuman}}</strong></span>
-      <span>Landing page: <code>{{.Project.IndexFile}}</code></span>
-      {{if .Project.Active}}<span><span class="badge badge--active">active</span></span>
-      {{else}}<span><span class="badge badge--unlinked">unlinked</span></span>{{end}}
+      <span><strong>{{.Project.FileCount}}</strong> {{plural .Project.FileCount "file" "files"}} · <strong>{{.Project.SizeHuman}}</strong></span>
+      <span>Landing page <code>{{.Project.IndexFile}}</code></span>
+      {{if .Project.Active}}<span class="badge badge--active">live</span>
+      {{else}}<span class="badge badge--unlinked">unlinked</span>{{end}}
     </div>
   </div>
   <div class="page-head__actions">
     {{if .Project.Active}}
-    <a class="btn btn--ghost" href="{{.Project.SiteURL}}" target="_blank" rel="noopener">View site</a>
-    {{end}}
-  </div>
-</div>
-
-{{if .Flash}}
-<div class="alert alert--success" role="status">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  <span>{{.Flash}}</span>
-</div>
-{{end}}
-{{if .Error}}
-<div class="alert alert--error" role="alert">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>
-  <span>{{.Error}}</span>
-</div>
-{{end}}
-
-<div class="card">
-  <div class="card__body">
-    <h2 class="section-title">Upload</h2>
-    <form method="POST" action="/_app/projects/{{.Project.ID}}/files"
-          enctype="multipart/form-data"
-          hx-post="/_app/projects/{{.Project.ID}}/files"
-          hx-encoding="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <div class="field">
-        <label class="label" for="files">Choose files</label>
-        <div class="dropzone" data-dropzone>
-          <div class="dropzone__drop">
-            <svg class="dropzone__icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 15V4m0 0L8 8m4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-            </svg>
-            <p class="dropzone__text"><strong>Drag &amp; drop</strong> files here, or <span class="dropzone__link">browse</span></p>
-            <p class="dropzone__hint" id="up-hint">Drop more anytime — files add up, and you
-              can remove any before uploading. Files land at the site root; a <code>.zip</code>
-              is extracted with its folder structure preserved. A lone HTML file becomes
-              <code>index.html</code> when the site has none yet.</p>
-            <input class="dropzone__input" type="file" id="files" name="files" multiple required
-                   aria-describedby="up-hint" aria-label="Choose files to upload">
-          </div>
-          <div class="dropzone__files" data-dz-list hidden></div>
-        </div>
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="btn btn--primary">Upload</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card__body">
-    <h2 class="section-title">Files</h2>
-    {{if .Files}}
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th scope="col">Path</th>
-            <th scope="col">Size</th>
-            <th scope="col"><span class="visually-hidden">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {{range .Files}}
-          <tr {{if and $.Renaming (eq .Path $.RenamePath)}}class="is-editing"{{else if and $.Editing (eq .Path $.EditPath)}}class="is-editing"{{end}}>
-            <td class="cell-path">
-              {{.Path}}
-              {{if .IsIndex}}<span class="badge badge--index" title="Served at the site root">index</span>{{end}}
-            </td>
-            <td class="num">{{.SizeHuman}}</td>
-            <td>
-              <div class="row-actions">
-                {{if .Editable}}
-                <a class="btn btn--ghost btn--sm"
-                   href="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
-                   hx-get="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
-                   hx-push-url="true">Edit</a>
-                {{end}}
-                <a class="btn btn--ghost btn--sm"
-                   href="/_app/projects/{{$.Project.ID}}/files/rename?path={{.Path}}"
-                   hx-get="/_app/projects/{{$.Project.ID}}/files/rename?path={{.Path}}"
-                   hx-push-url="true">Rename</a>
-                {{if and .IsHTML (not .IsIndex)}}
-                <form class="inline-form" method="POST"
-                      action="/_app/projects/{{$.Project.ID}}/files/index"
-                      hx-post="/_app/projects/{{$.Project.ID}}/files/index">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="path" value="{{.Path}}">
-                  <button type="submit" class="btn btn--ghost btn--sm">Set as index</button>
-                </form>
-                {{end}}
-                <form class="inline-form" method="POST"
-                      action="/_app/projects/{{$.Project.ID}}/files/delete"
-                      hx-post="/_app/projects/{{$.Project.ID}}/files/delete"
-                      hx-confirm="Delete “{{.Path}}”?">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="path" value="{{.Path}}">
-                  <button type="submit" class="btn btn--danger btn--sm">Delete</button>
-                </form>
-              </div>
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <div class="empty">
-      <svg class="empty__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h4l2 2h7A1.5 1.5 0 0 1 20 7.5v10A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+    <a class="btn" href="{{.Project.SiteURL}}" target="_blank" rel="noopener">
+      <span>Open site<span class="visually-hidden"> (new tab)</span></span>
+      <svg class="btn__trail" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M6 3.5H3.5v9h9V10M9 3.5h3.5V7M12.5 3.5 7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <p class="empty__title">No files yet</p>
-      <p class="empty__text">Upload files above to publish this site. HTML, CSS, JS,
-        and other text files can be edited here in the browser.</p>
-    </div>
+    </a>
     {{end}}
   </div>
 </div>
+
+{{if .Flash}}{{template "alert-success" .Flash}}{{end}}
+{{if .Error}}{{template "alert-error" .Error}}{{end}}
+{{if and .Files (not $hasIndex)}}
+<div class="alert alert--warning">
+  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M8 1.5 1 14h14L8 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M8 6.5v3.5M8 12h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <span><strong>No landing page.</strong> <code>{{.Project.IndexFile}}</code> does not exist, so
+    the site's root URL shows “not found”. Upload it, or use “Set as landing” on an HTML file below.</span>
+</div>
+{{end}}
 
 {{if .Editing}}
-<div class="card" id="editor">
+<section class="card card--focus" id="editor" aria-labelledby="editor-title">
   <div class="card__body">
-    <h2 class="section-title">Editing <code>{{.EditPath}}</code></h2>
+    <div class="card-head">
+      <h2 class="section-title" id="editor-title">Editing <code>{{.EditPath}}</code></h2>
+      {{if .Project.Active}}
+      <a class="btn btn--ghost btn--sm" href="{{.Project.SiteURL}}{{.EditPath}}" target="_blank" rel="noopener">
+        <span>View live<span class="visually-hidden"> {{.EditPath}} (new tab)</span></span>
+        <svg class="btn__trail" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M6 3.5H3.5v9h9V10M9 3.5h3.5V7M12.5 3.5 7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      {{end}}
+    </div>
     <form method="POST" action="/_app/projects/{{.Project.ID}}/files/save"
-          hx-post="/_app/projects/{{.Project.ID}}/files/save">
+          hx-post="/_app/projects/{{.Project.ID}}/files/save" data-editor>
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="path" value="{{.EditPath}}">
       <div class="field">
-        <label class="label" for="content">Contents</label>
+        <label class="label visually-hidden" for="content">Contents of {{.EditPath}}</label>
         <textarea class="textarea" id="content" name="content" spellcheck="false"
                   autocomplete="off" autocapitalize="off" wrap="off"
-                  data-autofocus
-                  aria-label="File contents for {{.EditPath}}">{{.EditContent}}</textarea>
+                  data-autofocus>{{.EditContent}}</textarea>
       </div>
       <div class="form-actions">
         <button type="submit" id="file-save" class="btn btn--primary">Save file</button>
         <a class="btn btn--ghost" href="/_app/projects/{{.Project.ID}}/files"
-           hx-get="/_app/projects/{{.Project.ID}}/files" hx-push-url="true">Cancel</a>
+           hx-get="/_app/projects/{{.Project.ID}}/files" hx-push-url="true">Close</a>
+        <span class="form-actions__status" data-editor-status aria-live="polite"></span>
       </div>
     </form>
   </div>
-</div>
+</section>
 {{end}}
 
 {{if .Renaming}}
-<div class="card" id="rename">
+<section class="card card--focus" id="rename" aria-labelledby="rename-title">
   <div class="card__body">
-    <h2 class="section-title">Rename <code>{{.RenamePath}}</code></h2>
+    <h2 class="section-title" id="rename-title">Rename <code>{{.RenamePath}}</code></h2>
     <form method="POST" action="/_app/projects/{{.Project.ID}}/files/rename"
           hx-post="/_app/projects/{{.Project.ID}}/files/rename">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="path" value="{{.RenamePath}}">
       <div class="field">
-        <label class="label" for="rename-name">New file name</label>
-        <input class="input" type="text" id="rename-name" name="name" value="{{.RenamePath}}"
-               data-autofocus autocomplete="off" spellcheck="false" required
-               aria-describedby="rename-hint">
-        <p class="hint" id="rename-hint">Base name only — no slashes. If this is the
-          site's landing page, the <code>index</code> pointer follows the new name.</p>
+        <label class="label" for="rename-name">New name</label>
+        {{$dir := pathDir .RenamePath}}
+        <div class="input-affix">
+          {{if $dir}}<span class="input-affix__prefix" aria-hidden="true">{{$dir}}</span>{{end}}
+          <input class="input" type="text" id="rename-name" name="name" value="{{pathBase .RenamePath}}"
+                 data-autofocus data-select-stem autocomplete="off" autocapitalize="off" spellcheck="false" required
+                 aria-describedby="rename-hint">
+        </div>
+        <p class="hint" id="rename-hint">Only the name changes{{if $dir}}; the file stays in
+          <code>{{$dir}}</code>{{end}}. No slashes. If this is the landing page, it stays
+          the landing page under its new name.</p>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn--primary">Rename</button>
@@ -207,6 +128,128 @@
       </div>
     </form>
   </div>
-</div>
+</section>
 {{end}}
+
+<section class="card" aria-labelledby="upload-title">
+  <div class="card__body">
+    <h2 class="section-title" id="upload-title">Upload</h2>
+    <form method="POST" action="/_app/projects/{{.Project.ID}}/files"
+          enctype="multipart/form-data"
+          hx-post="/_app/projects/{{.Project.ID}}/files"
+          hx-encoding="multipart/form-data" data-busy-label="Uploading…">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="dropzone dropzone--compact" data-dropzone>
+        <div class="dropzone__drop">
+          <svg class="dropzone__icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 15V4m0 0L8 8m4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <p class="dropzone__text">
+            <span class="dropzone__pointer"><strong>Drop files here</strong> or <span class="dropzone__link">browse</span></span>
+            <span class="dropzone__touch"><span class="dropzone__link">Choose files</span></span>
+          </p>
+          <p class="dropzone__hint" id="up-hint">Files land at the site root and replace
+            same-named ones; a <code>.zip</code> keeps its folders.</p>
+          <input class="dropzone__input" type="file" id="files" name="files" multiple required
+                 aria-describedby="up-hint" aria-label="Choose files to upload">
+        </div>
+        <div class="dropzone__files" data-dz-list hidden></div>
+        <p class="visually-hidden" role="status" data-dz-status></p>
+      </div>
+      <div class="upload-progress" data-upload-progress hidden>
+        <progress class="upload-progress__bar" max="100" value="0" aria-labelledby="upload-progress-text"></progress>
+        <span class="upload-progress__text" id="upload-progress-text" data-upload-progress-text>Uploading…</span>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Upload</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="files-title">
+  <div class="card__body">
+    <div class="card-head">
+      <h2 class="section-title" id="files-title">All files</h2>
+      {{if .Files}}
+      <div class="filter" data-file-filter hidden>
+        <label class="visually-hidden" for="file-filter">Filter files by path</label>
+        <svg class="filter__icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <input class="input input--sm" type="search" id="file-filter" placeholder="Filter by path"
+               autocomplete="off" spellcheck="false" aria-describedby="file-filter-count">
+        <span class="visually-hidden" id="file-filter-count" role="status" data-file-filter-count></span>
+      </div>
+      {{end}}
+    </div>
+    {{if .Files}}
+    <div class="table-wrap table-wrap--flush">
+      <table class="table table--stack table--files">
+        <thead>
+          <tr>
+            <th scope="col">Path</th>
+            <th scope="col" class="num">Size</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Files}}
+          <tr data-path="{{.Path}}"{{if and $.Renaming (eq .Path $.RenamePath)}} class="is-editing"{{else if and $.Editing (eq .Path $.EditPath)}} class="is-editing"{{end}}>
+            <td class="cell-path">
+              <span class="path">{{with pathDir .Path}}<span class="path__dir">{{.}}</span>{{end}}<span class="path__base">{{pathBase .Path}}</span></span>
+              {{if .IsIndex}}<span class="badge badge--index" title="Served at the site root">landing page</span>{{end}}
+            </td>
+            <td class="num cell-meta" data-label="Size">{{.SizeHuman}}</td>
+            <td class="cell-actions">
+              <div class="row-actions row-actions--slots">
+                {{if .Editable}}
+                <a class="btn btn--ghost btn--sm act-edit"
+                   href="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
+                   hx-get="/_app/projects/{{$.Project.ID}}/files/edit?path={{.Path}}"
+                   hx-push-url="true">Edit<span class="visually-hidden"> {{.Path}}</span></a>
+                {{end}}
+                <a class="btn btn--ghost btn--sm act-rename"
+                   href="/_app/projects/{{$.Project.ID}}/files/rename?path={{.Path}}"
+                   hx-get="/_app/projects/{{$.Project.ID}}/files/rename?path={{.Path}}"
+                   hx-push-url="true">Rename<span class="visually-hidden"> {{.Path}}</span></a>
+                {{if and .IsHTML (not .IsIndex)}}
+                <form class="inline-form act-index" method="POST"
+                      action="/_app/projects/{{$.Project.ID}}/files/index"
+                      hx-post="/_app/projects/{{$.Project.ID}}/files/index">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="path" value="{{.Path}}">
+                  <button type="submit" class="btn btn--ghost btn--sm">Set as landing<span class="visually-hidden"> page: {{.Path}}</span></button>
+                </form>
+                {{end}}
+                <form class="inline-form act-delete" method="POST"
+                      action="/_app/projects/{{$.Project.ID}}/files/delete"
+                      hx-post="/_app/projects/{{$.Project.ID}}/files/delete"
+                      hx-confirm="{{if .IsIndex}}Delete “{{.Path}}”? It is the landing page, so the site root will show “not found” until you set another one.{{else}}Delete “{{.Path}}”? This cannot be undone.{{end}}">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="path" value="{{.Path}}">
+                  <button type="submit" class="btn btn--ghost btn--ghost-danger btn--sm">Delete<span class="visually-hidden"> {{.Path}}</span></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      <p class="filter-empty" data-file-filter-empty hidden>No file paths match this filter.</p>
+    </div>
+    {{else}}
+    <div class="empty empty--inset">
+      <svg class="empty__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h4l2 2h7A1.5 1.5 0 0 1 20 7.5v10A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      </svg>
+      <p class="empty__title">No files yet</p>
+      <p class="empty__text">Upload an <code>index.html</code> (or a <code>.zip</code> of the
+        whole site) above to publish it. Text files can then be edited here.</p>
+    </div>
+    {{end}}
+  </div>
+</section>
 {{end}}

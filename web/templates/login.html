@@ -13,7 +13,7 @@
 </head>
 <body>
   <main class="login-page">
-    <div class="card login-card">
+    <div class="card login-card{{if .Error}} login-card--error{{end}}">
       <div class="card__body">
         <div class="login-brand">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -31,17 +31,17 @@
             <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
             <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          <span>{{.Error}}</span>
+          <span id="login-error">{{.Error}}</span>
         </div>
         {{end}}
 
-        <form method="POST" action="/_app/login">
+        <form method="POST" action="/_app/login" data-busy-label="Signing in…">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <div class="field">
             <label class="label" for="password">Password</label>
             <input class="input" type="password" id="password" name="password"
                    autocomplete="current-password" required autofocus
-                   {{if .Error}}aria-invalid="true"{{end}}>
+                   {{if .Error}}aria-invalid="true" aria-describedby="login-error"{{end}}>
           </div>
           <button type="submit" class="btn btn--primary btn--block">Sign in</button>
         </form>

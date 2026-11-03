@@ -196,7 +196,7 @@ func TestAPIKeyCreateRequiresName(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (re-render)", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "name for the key is required") {
+	if !strings.Contains(rr.Body.String(), "name for the token is required") {
 		t.Fatal("missing-name error not shown")
 	}
 	keys, _ := srv.store.ListAPIKeys(context.Background())

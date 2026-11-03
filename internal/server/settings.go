@@ -69,6 +69,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	data := settingsData{
 		CSRFToken: s.auth.IssueCSRFToken(),
 		Flash:     r.URL.Query().Get("flash"),
+		// ?error= comes from the revoke redirect, so it belongs to the
+		// access tokens card rather than the change-password form.
+		KeyError: r.URL.Query().Get("error"),
 	}
 	s.loadAPIKeys(r, &data)
 	s.rd.render(w, http.StatusOK, "settings.html", data)
@@ -104,10 +107,10 @@ func (s *Server) handleAPIKeyCreate(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	switch {
 	case name == "":
-		s.renderKeyError(w, r, "A name for the key is required.")
+		s.renderKeyError(w, r, "A name for the token is required.")
 		return
 	case len(name) > maxAPIKeyNameLen:
-		s.renderKeyError(w, r, "Key name is too long.")
+		s.renderKeyError(w, r, "Token name must be 60 characters or fewer.")
 		return
 	}
 
@@ -125,7 +128,7 @@ func (s *Server) handleAPIKeyCreate(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.CreateAPIKey(r.Context(), k); err != nil {
 		if errors.Is(err, store.ErrKeyExists) {
 			// Astronomically unlikely hash collision; ask the user to retry.
-			s.renderKeyError(w, r, "Could not create the key, please try again.")
+			s.renderKeyError(w, r, "Could not create the token, please try again.")
 			return
 		}
 		s.log.Error("create api key", slog.Any("error", err))
@@ -188,14 +191,14 @@ func (s *Server) handleAPIKeyDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.store.DeleteAPIKey(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			http.Redirect(w, r, "/_app/settings?flash=Key+not+found.", http.StatusSeeOther)
+			http.Redirect(w, r, "/_app/settings?error=That+token+no+longer+exists.", http.StatusSeeOther)
 			return
 		}
 		s.log.Error("delete api key", "id", id, slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/_app/settings?flash=API+key+revoked.", http.StatusSeeOther)
+	http.Redirect(w, r, "/_app/settings?flash=Access+token+revoked.", http.StatusSeeOther)
 }
 
 // renderKeyError re-renders the settings page with a key-section error (HTTP 200)

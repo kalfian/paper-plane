@@ -17,7 +17,7 @@
 </head>
 <body>
   <main class="login-page">
-    <div class="card login-card">
+    <div class="card login-card{{if .Error}} login-card--error{{end}}">
       <div class="card__body">
         <p class="site-lock__eyebrow">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -39,7 +39,7 @@
         </div>
         {{end}}
 
-        <form method="POST" action="{{.Action}}">
+        <form method="POST" action="{{.Action}}" data-busy-label="Unlocking…">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <input type="hidden" name="next" value="{{.Next}}">
           <div class="field">

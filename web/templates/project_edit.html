@@ -6,8 +6,13 @@
   The rename form is htmx-enhanced (redirects back to this same URL). The
   status/delete forms redirect to the project list, so they use native full
   navigation rather than swapping this page's main region.
+
+  Delete is a two-step disclosure (<details>): the first button only reveals
+  the consequence and the real submit button, so it is guarded with or without
+  JavaScript.
 */}}
-{{define "title"}}Edit {{.Project.Name}} · Paper Plane{{end}}
+{{define "title"}}{{.Project.Name}} · Paper Plane{{end}}
+{{define "nav-projects"}} aria-current="page"{{end}}
 
 {{define "content"}}
 <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -20,23 +25,23 @@
   <div class="page-head__titles">
     <h1 class="page-title">{{.Project.Name}}</h1>
     <div class="meta-line">
-      <span>Slug <strong><code>{{.Project.Slug}}</code></strong></span>
-      <span>
-        {{if .Project.Active}}<span class="badge badge--active">active</span>
-        {{else}}<span class="badge badge--unlinked">unlinked</span>{{end}}
-      </span>
+      {{if .Project.Active}}
+      <a class="meta-link" href="{{.Project.SiteURL}}" target="_blank" rel="noopener"><code>{{.Project.SiteURL}}</code><span class="visually-hidden"> (opens the live site in a new tab)</span></a>
+      <span class="badge badge--active">live</span>
+      {{else}}
+      <code>{{.Project.SiteURL}}</code>
+      <span class="badge badge--unlinked">unlinked</span>
+      {{end}}
       {{if .Project.Protected}}
-      <span>
-        <span class="badge badge--lock">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
-            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.6"/>
-          </svg>
-          password<span class="visually-hidden"> protected</span>
-        </span>
+      <span class="badge badge--lock">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.6"/>
+        </svg>
+        password<span class="visually-hidden"> protected</span>
       </span>
       {{end}}
-      <span><strong>{{.Project.FileCount}}</strong> files · <strong>{{.Project.SizeHuman}}</strong></span>
+      <span><strong>{{.Project.FileCount}}</strong> {{plural .Project.FileCount "file" "files"}} · <strong>{{.Project.SizeHuman}}</strong></span>
     </div>
   </div>
   <div class="page-head__actions">
@@ -44,54 +49,36 @@
   </div>
 </div>
 
-{{if .Flash}}
-<div class="alert alert--success" role="status">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="m3 8.5 3.5 3.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  <span>{{.Flash}}</span>
-</div>
-{{end}}
-{{if .Error}}
-<div class="alert alert--error" role="alert">
-  <svg class="alert__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-    <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>
-  <span>{{.Error}}</span>
-</div>
-{{end}}
+{{if .Flash}}{{template "alert-success" .Flash}}{{end}}
+{{if .Error}}{{template "alert-error" .Error}}{{end}}
 
-<div class="card">
+<section class="card" aria-labelledby="details-title">
   <div class="card__body">
-    <h2 class="section-title">Details</h2>
+    <h2 class="section-title" id="details-title">Details</h2>
     <form method="POST" action="/_app/projects/{{.Project.ID}}"
           hx-post="/_app/projects/{{.Project.ID}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <div class="field">
         <label class="label" for="name">Name</label>
         <input class="input" type="text" id="name" name="name" value="{{.Project.Name}}"
-               required autocomplete="off" {{if .Error}}aria-invalid="true"{{end}}>
+               required autocomplete="off" {{if .Error}}aria-invalid="true" autofocus{{end}}>
       </div>
       <div class="field">
         <label class="label" for="slug-ro">Slug</label>
-        <input class="input" type="text" id="slug-ro" value="{{.Project.Slug}}" readonly
+        <input class="input input--static" type="text" id="slug-ro" value="{{.Project.Slug}}" readonly
                aria-describedby="slug-ro-hint">
-        <p class="hint" id="slug-ro-hint">The slug is fixed once a project is created.</p>
+        <p class="hint" id="slug-ro-hint">Part of the site's URL, so it is fixed once a project is created.</p>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn--primary">Save changes</button>
-        {{if .Project.Active}}
-        <a class="btn btn--ghost" href="{{.Project.SiteURL}}" target="_blank" rel="noopener">View site</a>
-        {{end}}
       </div>
     </form>
   </div>
-</div>
+</section>
 
-<div class="card">
+<section class="card" aria-labelledby="password-title">
   <div class="card__body">
-    <h2 class="section-title">Password protection</h2>
+    <h2 class="section-title" id="password-title">Password protection</h2>
     {{if .Project.Protected}}
     <p class="lock-status lock-status--on">
       <svg class="lock-status__icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -123,8 +110,8 @@
                {{if .PasswordError}}aria-invalid="true" autofocus{{end}}>
         {{if .PasswordError}}<p class="field-error" id="site-password-error" role="alert">{{.PasswordError}}</p>{{end}}
         <p class="hint" id="site-password-hint">
-          At least 1 character, up to 72 bytes.
-          {{if .Project.Protected}}Changing it signs out visitors who already unlocked the site.{{else}}You will not be asked for it while signed in.{{end}}
+          Up to 72 bytes; spaces count.
+          {{if .Project.Protected}}Changing it signs out visitors who already unlocked the site.{{else}}Share it with your visitors; you will not be asked for it while signed in.{{end}}
         </p>
       </div>
     </form>
@@ -141,29 +128,54 @@
       {{end}}
     </div>
   </div>
-</div>
+</section>
 
-<div class="card">
+<section class="card" aria-labelledby="publish-title">
   <div class="card__body">
-    <h2 class="section-title">Visibility &amp; removal</h2>
-    <div class="form-actions">
+    <h2 class="section-title" id="publish-title">Publishing</h2>
+    <div class="action-row">
+      <p class="action-row__text">
+        {{if .Project.Active}}
+        <strong>Live</strong> at <code>{{.Project.SiteURL}}</code>. Unlinking takes the
+        site offline (visitors get “not found”) and keeps every file, so you can relink it later.
+        {{else}}
+        <strong>Offline.</strong> Visitors to <code>{{.Project.SiteURL}}</code> get “not
+        found”. The files are kept; relink to publish the site again.
+        {{end}}
+      </p>
       {{if .Project.Active}}
       <form class="inline-form" method="POST" action="/_app/projects/{{.Project.ID}}/unlink">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="btn">Unlink <span class="muted">(take offline, keep files)</span></button>
+        <button type="submit" class="btn">Unlink site</button>
       </form>
       {{else}}
       <form class="inline-form" method="POST" action="/_app/projects/{{.Project.ID}}/relink">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="btn btn--primary">Relink <span>(publish again)</span></button>
+        <button type="submit" class="btn btn--primary">Relink site</button>
       </form>
       {{end}}
-      <form class="inline-form" method="POST" action="/_app/projects/{{.Project.ID}}/delete"
-            onsubmit="return confirm('Delete “{{.Project.Name}}” and all its files? This cannot be undone.');">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="btn btn--danger">Delete project</button>
-      </form>
     </div>
   </div>
-</div>
+</section>
+
+<section class="card card--danger" aria-labelledby="delete-title">
+  <div class="card__body">
+    <h2 class="section-title" id="delete-title">Delete project</h2>
+    <p class="card__text">Permanently removes the project, its
+      {{.Project.FileCount}} {{plural .Project.FileCount "file" "files"}} and its URL.</p>
+    <details class="confirm">
+      <summary class="btn btn--danger">Delete project…</summary>
+      <div class="confirm__panel">
+        <p class="confirm__text">
+          <strong>Delete “{{.Project.Name}}” for good?</strong> This cannot be undone.
+          To take it offline but keep the files, unlink it instead.
+        </p>
+        <form method="POST" action="/_app/projects/{{.Project.ID}}/delete">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <button type="submit" class="btn btn--danger-solid">Yes, delete permanently</button>
+        </form>
+      </div>
+    </details>
+  </div>
+</section>
 {{end}}

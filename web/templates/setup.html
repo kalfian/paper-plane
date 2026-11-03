@@ -13,7 +13,7 @@
 </head>
 <body>
   <main class="login-page">
-    <div class="card login-card">
+    <div class="card login-card{{if .Error}} login-card--error{{end}}">
       <div class="card__body">
         <div class="login-brand">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -31,18 +31,19 @@
             <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
             <path d="M8 4.5v4M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          <span>{{.Error}}</span>
+          <span id="setup-error">{{.Error}}</span>
         </div>
         {{end}}
 
-        <form method="POST" action="/_app/setup">
+        <form method="POST" action="/_app/setup" data-busy-label="Saving…">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <div class="field">
             <label class="label" for="new_password">New password</label>
             <input class="input" type="password" id="new_password" name="new_password"
-                   autocomplete="new-password" required autofocus aria-describedby="new_password-hint"
+                   autocomplete="new-password" required autofocus minlength="8"
+                   aria-describedby="{{if .Error}}setup-error {{end}}new_password-hint"
                    {{if .Error}}aria-invalid="true"{{end}}>
-            <p class="hint" id="new_password-hint">At least 8 characters.</p>
+            <p class="hint" id="new_password-hint">At least 8 characters, up to 72. A forgotten password can only be reset on the server, so keep it in a password manager.</p>
           </div>
           <div class="field">
             <label class="label" for="confirm_password">Confirm password</label>

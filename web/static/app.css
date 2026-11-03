@@ -11,7 +11,14 @@
   - Radius:  one language — 4/6/10px.
   - Shadow:  two elevations, both subtle.
   - Color:   true-black neutral palette + ONE accent (Kalfian brand ocean blue
-             #288DCC / interactive #1A6FA8). Semantic roles only.
+             #288DCC / interactive #1A6FA8). Semantic roles only. Every text
+             token is >= 4.5:1 on every surface it sits on; --border-input and
+             --focus are >= 3:1 (WCAG 1.4.11 / 2.4.11) in both schemes.
+  - Motion:  three durations (120/180/240ms) and two easings. Only transform
+             and opacity animate (plus colour transitions on hover). Nothing
+             starts hidden waiting for JS: entrance keyframes run from a
+             visible end state, so content shows even if animation never runs.
+             prefers-reduced-motion turns all of it off (see the end of file).
   - Theme:   dark by default (true black), light via prefers-color-scheme.
 */
 
@@ -49,6 +56,16 @@
   --radius: 6px;
   --radius-lg: 10px;
 
+  /* Field width: single-line inputs stop at a readable measure. */
+  --field-max: 40rem;
+
+  /* Motion */
+  --dur-1: 120ms;  /* hover, press, colour */
+  --dur-2: 180ms;  /* enter / exit of small elements */
+  --dur-3: 240ms;  /* panels, alerts */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
   /* Elevation — dark-first (deeper shadows read on true black) */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.4);
@@ -60,13 +77,14 @@
   --surface-2: #1a1c1f;
   --border: #26282d;
   --border-strong: #3a3d44;
+  --border-input: #686c75;  /* 3.2:1+ on every surface: form field boundary */
   --text: #f5f5f7;
   --text-muted: #a2a6ae;
-  --text-faint: #6f737b;
+  --text-faint: #80858e;    /* 4.6:1 on surface-2, 5.4:1 on paper */
 
   /* Accent — Kalfian ocean blue (kalfian.com). Bright #4BACD6 stays legible on
-     true black for both link text and button fill (with dark --accent-fg); the
-     hero hue #288DCC drives the focus ring, logo mark, and favicon. */
+     true black for link text; the hero hue #288DCC drives the logo mark and
+     favicon. --focus is a solid ring colour (>= 6:1 on dark surfaces). */
   --accent: #4bacd6;
   --accent-hover: #6fc0e2;
   --accent-active: #93d1ea;
@@ -74,6 +92,7 @@
   --accent-soft: #0f2a3a;
   --accent-soft-fg: #8ccfe9;
   --brand-hero: #288dcc;
+  --focus: #4bacd6;
   /* Primary button fill — the brand's deep ocean blue with white text (its
      actual button style), kept distinct from the bright link accent above. */
   --btn-primary-bg: #1a6fa8;
@@ -89,10 +108,10 @@
   --danger-hover: #fca5a5;
   --danger-soft: #3a1717;
   --danger-fg: #fca5a5;
+  --danger-solid: #b91c1c;  /* white text 6.5:1 */
+  --danger-solid-hover: #991b1b;
   --warning-soft: #3a2f12;
   --warning-fg: #fcd34d;
-
-  --focus-ring: 0 0 0 3px rgba(40, 141, 204, 0.5);
 }
 
 @media (prefers-color-scheme: light) {
@@ -105,12 +124,13 @@
     --surface-2: #f0f2f5;
     --border: #dfe3e8;
     --border-strong: #c7ccd4;
+    --border-input: #838b97;  /* 3.1:1+ on every light surface */
     --text: #1a2230;
     --text-muted: #5b6472;
-    --text-faint: #8a93a1;
+    --text-faint: #646d7a;    /* 4.7:1 on surface-2 */
 
     /* Interactive accent uses the dark brand variant #1A6FA8 (~5.3:1 with white
-       text); bare hero #288DCC is only ~3.6:1 and stays for the focus ring. */
+       text); bare hero #288DCC is only ~3.6:1 so it stays decorative. */
     --accent: #1a6fa8;
     --accent-hover: #156091;
     --accent-active: #104d74;
@@ -118,6 +138,7 @@
     --accent-soft: #e4f1fb;
     --accent-soft-fg: #1a6fa8;
     --brand-hero: #288dcc;
+    --focus: #1a6fa8;
     --btn-primary-bg: #1a6fa8;
     --btn-primary-hover: #156091;
     --btn-primary-active: #104d74;
@@ -130,10 +151,10 @@
     --danger-hover: #991b1b;
     --danger-soft: #fee2e2;
     --danger-fg: #991b1b;
+    --danger-solid: #b91c1c;
+    --danger-solid-hover: #991b1b;
     --warning-soft: #fef3c7;
     --warning-fg: #92400e;
-
-    --focus-ring: 0 0 0 3px rgba(40, 141, 204, 0.35);
   }
 }
 
@@ -156,6 +177,7 @@ body {
   color: var(--text);
   background: var(--paper);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1,
@@ -167,13 +189,19 @@ h3 {
   color: var(--text);
 }
 
+p {
+  margin: 0;
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
+  border-radius: var(--radius-sm);
 }
 
 a:hover {
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 code {
@@ -184,11 +212,11 @@ code {
   border-radius: var(--radius-sm);
 }
 
-/* Visible focus for keyboard users, suppressed for mouse */
+/* Visible focus for keyboard users: a solid 2px ring with a gap, >= 3:1
+   against every surface in both schemes. Mouse clicks do not show it. */
 :focus-visible {
-  outline: 2px solid transparent;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* The hidden attribute must beat component display values (.btn is
@@ -213,18 +241,19 @@ code {
 .skip-link {
   position: absolute;
   left: var(--sp-3);
-  top: -48px;
+  top: var(--sp-3);
   z-index: 100;
   background: var(--surface);
   color: var(--text);
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
-  transition: top 0.15s ease;
+  transform: translateY(-200%);
+  transition: transform var(--dur-2) var(--ease-out);
 }
 
 .skip-link:focus {
-  top: var(--sp-3);
+  transform: none;
 }
 
 /* ---------- App shell ---------- */
@@ -246,6 +275,10 @@ code {
   gap: var(--sp-5);
 }
 
+.app-header__logout {
+  margin-left: auto;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -253,6 +286,7 @@ code {
   font-weight: var(--fw-semibold);
   font-size: var(--fs-md);
   color: var(--text);
+  white-space: nowrap;
 }
 
 .brand:hover {
@@ -262,6 +296,12 @@ code {
 .brand__mark {
   color: var(--accent);
   flex: none;
+  transition: transform var(--dur-3) var(--ease-out);
+}
+
+/* A small lift of the plane on hover: the one playful moment in the shell. */
+.brand:hover .brand__mark {
+  transform: translate(2px, -2px);
 }
 
 .app-nav {
@@ -275,6 +315,7 @@ code {
   padding: var(--sp-1) var(--sp-3);
   border-radius: var(--radius);
   font-weight: var(--fw-medium);
+  transition: color var(--dur-1) ease, background-color var(--dur-1) ease;
 }
 
 .app-nav a:hover {
@@ -288,8 +329,44 @@ code {
   background: var(--accent-soft);
 }
 
-.app-header__spacer {
-  flex: 1;
+/* Request indicator: a 2px bar under the header while any request is in
+   flight (html.is-busy, set by app.js for htmx requests and native form
+   submits). An indeterminate sweep; static under reduced motion. */
+.request-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--dur-2) ease;
+  pointer-events: none;
+}
+
+.request-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--brand-hero);
+  transform-origin: left;
+  animation: pp-sweep 1.1s var(--ease-in-out) infinite;
+  animation-play-state: paused;
+}
+
+.is-busy .request-bar {
+  opacity: 1;
+  transition-delay: 120ms; /* fast responses never flash the bar */
+}
+
+.is-busy .request-bar::before {
+  animation-play-state: running;
+}
+
+@keyframes pp-sweep {
+  0% { transform: translateX(-100%) scaleX(0.4); }
+  60% { transform: translateX(30%) scaleX(0.6); }
+  100% { transform: translateX(100%) scaleX(0.4); }
 }
 
 .app-main {
@@ -298,22 +375,16 @@ code {
   padding: var(--sp-6) var(--sp-5) var(--sp-10);
 }
 
+.is-busy .app-main {
+  cursor: progress;
+}
+
 /* #app-main is a scripted focus fallback after htmx swaps (see layout.html);
    it is a landmark, not an interactive control, so it takes focus silently
    without a ring rather than boxing the whole content region. */
 .app-main:focus,
 .app-main:focus-visible {
   outline: none;
-  box-shadow: none;
-}
-
-.app-footer {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: var(--sp-5);
-  color: var(--text-faint);
-  font-size: var(--fs-xs);
-  border-top: 1px solid var(--border);
 }
 
 /* ---------- Page header (title + actions) ---------- */
@@ -329,13 +400,20 @@ code {
   min-width: 0;
 }
 
+.page-head__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex: none;
+}
+
 .page-title {
   font-size: var(--fs-xl);
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
 .page-subtitle {
-  margin: var(--sp-1) 0 0;
+  margin-top: var(--sp-1);
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
@@ -354,6 +432,12 @@ code {
   color: var(--text-muted);
 }
 
+.breadcrumb [aria-current="page"] {
+  color: var(--text-faint);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .breadcrumb__sep {
   color: var(--text-faint);
 }
@@ -363,6 +447,7 @@ code {
   --btn-bg: var(--surface);
   --btn-fg: var(--text);
   --btn-border: var(--border-strong);
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -371,19 +456,23 @@ code {
   font-weight: var(--fw-medium);
   line-height: 1;
   padding: var(--sp-2) var(--sp-4);
-  min-height: 34px;
+  min-height: 36px;
   border: 1px solid var(--btn-border);
   border-radius: var(--radius);
   background: var(--btn-bg);
   color: var(--btn-fg);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease,
-    box-shadow 0.12s ease, transform 0.04s ease;
+  text-decoration: none;
+  transition: background-color var(--dur-1) ease, border-color var(--dur-1) ease,
+    color var(--dur-1) ease, box-shadow var(--dur-1) ease,
+    transform var(--dur-1) var(--ease-out);
   white-space: nowrap;
+  user-select: none;
 }
 
 .btn:hover {
   background: var(--surface-2);
+  text-decoration: none;
 }
 
 /* Solid (bordered) secondary buttons get a touch more definition on hover;
@@ -392,20 +481,23 @@ code {
   border-color: var(--text-faint);
 }
 
+/* Press: a small, quick sink. Transform only, so nothing reflows. */
 .btn:active {
-  transform: translateY(1px);
-}
-
-.btn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  transform: translateY(1px) scale(0.98);
+  transition-duration: 40ms;
 }
 
 .btn:disabled,
-.btn[aria-disabled="true"] {
+.btn[aria-disabled="true"]:not(.is-busy) {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
+}
+
+.btn__trail {
+  flex: none;
+  margin-left: calc(-1 * var(--sp-1));
+  opacity: 0.8;
 }
 
 .btn--primary {
@@ -428,18 +520,26 @@ code {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
-.btn--primary:focus-visible {
-  box-shadow: var(--focus-ring), 0 1px 2px rgba(0, 0, 0, 0.28);
-}
-
 .btn--danger {
   --btn-fg: var(--danger-fg);
-  --btn-border: color-mix(in srgb, var(--danger) 40%, var(--border));
+  --btn-border: color-mix(in srgb, var(--danger) 45%, var(--border));
 }
 
-.btn--danger:hover {
+.btn--danger:not(.btn--ghost):hover {
   background: var(--danger-soft);
   border-color: var(--danger);
+}
+
+/* The final, irreversible confirm: solid red with white ink. */
+.btn--danger-solid {
+  --btn-bg: var(--danger-solid);
+  --btn-fg: #ffffff;
+  --btn-border: transparent;
+  font-weight: var(--fw-semibold);
+}
+
+.btn--danger-solid:hover {
+  background: var(--danger-solid-hover);
 }
 
 .btn--ghost {
@@ -453,8 +553,15 @@ code {
   background: var(--surface-2);
 }
 
+/* Row-level destructive action: quiet until hovered, so a list of files is
+   not a column of red alarms. */
+.btn--ghost-danger:hover {
+  --btn-fg: var(--danger-fg);
+  background: var(--danger-soft);
+}
+
 .btn--sm {
-  min-height: 28px;
+  min-height: 30px;
   padding: var(--sp-1) var(--sp-3);
   font-size: var(--fs-sm);
 }
@@ -463,38 +570,28 @@ code {
   width: 100%;
 }
 
-/* htmx in-flight state: dim + show spinner, block re-clicks */
-.btn.htmx-request {
-  color: transparent;
+/* In-flight state: app.js marks the submitting button .is-busy (native and
+   htmx submits) and may swap its label for [data-busy-label]. A spinner
+   replaces nothing — the label stays readable next to it. */
+.btn.is-busy {
   pointer-events: none;
-  position: relative;
+  cursor: progress;
 }
 
-.btn.htmx-request::after {
+.btn.is-busy::before {
   content: "";
-  position: absolute;
-  width: 15px;
-  height: 15px;
+  flex: none;
+  width: 12px;
+  height: 12px;
   border: 2px solid currentColor;
-  border-top-color: transparent;
+  border-right-color: transparent;
   border-radius: 50%;
-  color: var(--btn-fg);
-  animation: pp-spin 0.6s linear infinite;
+  animation: pp-spin 0.7s linear infinite;
 }
 
 @keyframes pp-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .btn.htmx-request::after {
-    animation-duration: 1.4s;
-  }
-  .btn,
-  .skip-link {
-    transition: none;
   }
 }
 
@@ -514,10 +611,96 @@ code {
   margin-top: var(--sp-5);
 }
 
+/* The editor / rename card: the task in progress, marked with the accent. */
+.card--focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  animation: pp-rise var(--dur-3) var(--ease-out);
+}
+
+.card--danger {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+}
+
+.card__text {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  margin-bottom: var(--sp-4);
+  max-width: 60ch;
+}
+
+/* Card title row with a trailing control (filter, "View live"). */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.card-head .section-title {
+  margin-bottom: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .section-title {
   font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
   margin-bottom: var(--sp-4);
+}
+
+/* A status sentence above its action (Publishing card), laid out like the
+   Delete card below it so both read the same way. */
+.action-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+}
+
+.action-row__text {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  max-width: 60ch;
+}
+
+.action-row__text strong {
+  color: var(--text);
+}
+
+/* Two-step destructive confirm without JavaScript: the summary reveals the
+   consequence and the real submit button. */
+.confirm > summary {
+  list-style: none;
+}
+
+.confirm > summary::-webkit-details-marker {
+  display: none;
+}
+
+.confirm[open] > summary {
+  --btn-bg: var(--danger-soft);
+}
+
+.confirm__panel {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger-soft) 55%, var(--surface));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-4);
+  animation: pp-rise var(--dur-2) var(--ease-out);
+}
+
+.confirm__text {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  max-width: 52ch;
 }
 
 /* ---------- Forms ---------- */
@@ -543,38 +726,67 @@ code {
   font: inherit;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-input);
   border-radius: var(--radius);
   padding: var(--sp-2) var(--sp-3);
   min-height: 36px;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color var(--dur-1) ease, box-shadow var(--dur-1) ease;
 }
 
-.input::placeholder {
+.input {
+  max-width: var(--field-max);
+}
+
+.input::placeholder,
+.textarea::placeholder {
   color: var(--text-faint);
+  opacity: 1;
 }
 
 .input:hover,
 .textarea:hover {
-  border-color: var(--text-faint);
+  border-color: var(--text-muted);
 }
 
+/* Focus on fields (mouse or keyboard: you are about to type): the border and
+   a 1px halo in the solid focus colour make a 2px ring. The transparent
+   outline keeps a visible ring in forced-colours mode. */
 .input:focus,
 .textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus);
 }
 
 .input:disabled,
 .input[readonly] {
   background: var(--surface-2);
   color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
+.input:disabled {
   cursor: not-allowed;
+}
+
+/* A readonly value that is information, not a broken field (project slug). */
+.input--static[readonly] {
+  cursor: default;
 }
 
 .input[aria-invalid="true"] {
   border-color: var(--danger);
+}
+
+.input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.input--sm {
+  min-height: 32px;
+  padding-block: var(--sp-1);
+  font-size: var(--fs-sm);
 }
 
 /* A readonly input showing a value to copy (e.g. a freshly-minted API token).
@@ -583,6 +795,7 @@ code {
 .input--mono {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
+  max-width: none;
 }
 
 .input--mono[readonly] {
@@ -590,8 +803,58 @@ code {
   cursor: text;
 }
 
+/* Fixed text around an input ("/" + slug + "/", a folder before a file name).
+   The affixes are aria-hidden; hints carry the meaning. */
+.input-affix {
+  display: flex;
+  align-items: stretch;
+  max-width: var(--field-max);
+}
+
+.input-affix .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.input-affix__prefix,
+.input-affix__suffix {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  max-width: 50%;
+  padding: 0 var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border-input);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.input-affix__prefix {
+  border-right: 0;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.input-affix__suffix {
+  border-left: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.input-affix__prefix + .input {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.input-affix .input:has(+ .input-affix__suffix) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .textarea {
-  min-height: 320px;
+  min-height: 360px;
   resize: vertical;
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
@@ -612,6 +875,7 @@ code {
 
 .textarea--snippet[readonly] {
   background: var(--surface-2);
+  border-color: var(--border-strong);
   cursor: text;
 }
 
@@ -662,64 +926,56 @@ code {
   flex: none;
 }
 
-/* Copy buttons hold their width across Copy -> Copied; success ink confirms. */
+/* Copy buttons hold their width across Copy -> Copied; success ink confirms
+   and the label pops once. */
 .btn[data-copy] {
-  min-width: 4.75rem;
+  min-width: 5.25rem;
 }
 
 .btn.is-copied {
   --btn-fg: var(--success-fg);
-  --btn-border: color-mix(in srgb, var(--success) 40%, var(--border));
+  --btn-border: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.btn.is-copied [data-copy-label] {
+  animation: pp-pop var(--dur-3) var(--ease-out);
+}
+
+.btn.is-copied [data-copy-label] {
+  display: inline-block;
+}
+
+/* Decorative tick: the empty alt text keeps it out of the accessible name. */
+.btn.is-copied [data-copy-label]::before {
+  content: "✓ " / "";
+}
+
+@keyframes pp-pop {
+  0% { transform: scale(0.85); opacity: 0.4; }
+  100% { transform: none; opacity: 1; }
 }
 
 .hint {
-  margin: var(--sp-2) 0 0;
+  margin-top: var(--sp-2);
   font-size: var(--fs-xs);
   color: var(--text-muted);
+  max-width: 70ch;
+}
+
+/* Live URL preview under the slug (app.js fills it). */
+.hint--preview {
+  color: var(--text);
+}
+
+.hint--preview code {
+  color: var(--accent);
 }
 
 .field-error {
-  margin: var(--sp-2) 0 0;
+  margin-top: var(--sp-2);
   font-size: var(--fs-xs);
   color: var(--danger-fg);
-}
-
-/* File input styled as a dropzone-ish control */
-.file-field {
-  display: block;
-}
-
-.file-input {
-  width: 100%;
-  font: inherit;
-  color: var(--text-muted);
-  background: var(--surface-2);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  padding: var(--sp-3);
-  cursor: pointer;
-}
-
-.file-input::file-selector-button {
-  font: inherit;
-  font-weight: var(--fw-medium);
-  margin-right: var(--sp-3);
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-
-.file-input:hover {
-  border-color: var(--accent);
-}
-
-.file-input:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-color: var(--accent);
+  animation: pp-rise var(--dur-2) var(--ease-out);
 }
 
 /* Dropzone — a drag-and-drop upload surface with a staged file list.
@@ -744,10 +1000,14 @@ code {
   padding: var(--sp-6) var(--sp-4);
   text-align: center;
   background: var(--surface-2);
-  border: 1.5px dashed var(--border-strong);
+  border: 1.5px dashed var(--border-input);
   border-radius: var(--radius);
   color: var(--text-muted);
-  transition: border-color 0.12s ease, background-color 0.12s ease;
+  transition: border-color var(--dur-1) ease, background-color var(--dur-1) ease;
+}
+
+.dropzone--compact .dropzone__drop {
+  padding: var(--sp-5) var(--sp-4);
 }
 
 .dropzone__input {
@@ -762,10 +1022,10 @@ code {
 
 .dropzone__icon {
   color: var(--text-faint);
+  transition: transform var(--dur-2) var(--ease-out), color var(--dur-1) ease;
 }
 
 .dropzone__text {
-  margin: 0;
   font-size: var(--fs-base);
   color: var(--text);
 }
@@ -776,10 +1036,24 @@ code {
   text-underline-offset: 2px;
 }
 
+/* Touch screens have no drag source: say "Choose files" instead. */
+.dropzone__touch {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .dropzone__pointer {
+    display: none;
+  }
+  .dropzone__touch {
+    display: inline;
+  }
+}
+
 .dropzone__hint {
-  margin: 0;
   font-size: var(--fs-xs);
   color: var(--text-muted);
+  max-width: 60ch;
 }
 
 /* Hover / keyboard-focus (the overlaid input carries focus) / active drag. */
@@ -789,14 +1063,26 @@ code {
   background: var(--surface);
 }
 
-.dropzone__drop:focus-within {
-  box-shadow: var(--focus-ring);
+.dropzone__drop:hover .dropzone__icon,
+.dropzone__drop:focus-within .dropzone__icon {
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.dropzone__drop:has(:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .dropzone--drag .dropzone__drop {
   border-color: var(--accent);
   border-style: solid;
   background: var(--accent-soft);
+}
+
+.dropzone--drag .dropzone__icon {
+  color: var(--accent);
+  transform: translateY(-4px);
 }
 
 .dropzone--filled .dropzone__drop {
@@ -831,7 +1117,9 @@ code {
   color: var(--danger-fg);
   background: none;
   border: 0;
-  padding: 0;
+  padding: var(--sp-1) var(--sp-2);
+  margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-2));
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -843,17 +1131,30 @@ code {
   list-style: none;
   margin: 0;
   padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .dz-file {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
 }
 
 .dz-file + .dz-file {
   border-top: 1px solid var(--border);
+}
+
+/* Newly staged files slide in; removed ones fade out (app.js waits for it). */
+.dz-file--new {
+  animation: pp-rise var(--dur-2) var(--ease-out);
+}
+
+.dz-file--leaving {
+  opacity: 0;
+  transform: translateX(8px);
+  transition: opacity var(--dur-2) ease, transform var(--dur-2) var(--ease-out);
 }
 
 .dz-file__name {
@@ -873,22 +1174,23 @@ code {
   font-variant-numeric: tabular-nums;
 }
 
+/* 32px square: a comfortable pointer and touch target inside the row. */
 .dz-file__remove {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   font-size: 18px;
   line-height: 1;
   color: var(--text-muted);
   background: none;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+  transition: color var(--dur-1) ease, border-color var(--dur-1) ease, background-color var(--dur-1) ease;
 }
 
 .dz-file__remove:hover {
@@ -897,14 +1199,48 @@ code {
   background: var(--danger-soft);
 }
 
-.dz-file__remove:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+/* Upload progress (htmx uploads; app.js reveals and fills it). */
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  animation: pp-rise var(--dur-2) var(--ease-out);
+}
+
+.upload-progress__bar {
+  flex: 1 1 auto;
+  height: 6px;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.upload-progress__bar::-webkit-progress-bar {
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+
+.upload-progress__bar::-webkit-progress-value {
+  background: var(--brand-hero);
+  border-radius: 999px;
+  transition: width var(--dur-2) linear;
+}
+
+.upload-progress__bar::-moz-progress-bar {
+  background: var(--brand-hero);
+  border-radius: 999px;
 }
 
 /* Opt-in "use file name" button under the Slug field. */
 .autofill-btn {
   margin-top: var(--sp-2);
+  animation: pp-rise var(--dur-2) var(--ease-out);
 }
 
 .form-actions {
@@ -915,6 +1251,16 @@ code {
   flex-wrap: wrap;
 }
 
+/* Editor status ("Unsaved changes", the Ctrl/Cmd+S hint). */
+.form-actions__status {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.form-actions__status.is-dirty {
+  color: var(--warning-fg);
+}
+
 /* The "create key" form sits below the existing-keys list/empty state in the
    same card; a hairline separates the read view from the create action. */
 .key-create {
@@ -923,9 +1269,14 @@ code {
   border-top: 1px solid var(--border);
 }
 
+.key-create .subsection-title {
+  margin-bottom: var(--sp-4);
+}
+
 /* The one-time token reveal (+ MCP client snippets) above the tokens table. */
 .key-reveal {
   margin-bottom: var(--sp-5);
+  animation: pp-rise var(--dur-3) var(--ease-out);
 }
 
 /* A titled group inside a card, divided by the same hairline as .key-create. */
@@ -977,6 +1328,10 @@ code {
 }
 
 /* ---------- Alerts ---------- */
+/* Alerts enter with a short rise (server-rendered and htmx-swapped alike).
+   The keyframe ends at the resting state, so with no animation they simply
+   show. Success flashes are not auto-dismissed: collapsing them would shift
+   the page under the pointer. */
 .alert {
   display: flex;
   align-items: flex-start;
@@ -986,6 +1341,7 @@ code {
   font-size: var(--fs-sm);
   margin-bottom: var(--sp-5);
   border: 1px solid transparent;
+  animation: pp-rise var(--dur-3) var(--ease-out);
 }
 
 .alert--success {
@@ -1011,6 +1367,22 @@ code {
   margin-top: 1px;
 }
 
+.alert a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Inside a card, an alert sits closer to the content it belongs to. */
+.card .alert {
+  margin-bottom: var(--sp-4);
+}
+
+@keyframes pp-rise {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* ---------- Badges ---------- */
 .badge {
   display: inline-flex;
@@ -1022,6 +1394,7 @@ code {
   border-radius: 999px;
   border: 1px solid transparent;
   line-height: 1.5;
+  white-space: nowrap;
 }
 
 .badge::before {
@@ -1048,6 +1421,7 @@ code {
   margin-left: var(--sp-2);
   background: var(--accent-soft);
   color: var(--accent-soft-fg);
+  font-family: var(--font-sans);
 }
 
 .badge--index::before {
@@ -1059,7 +1433,6 @@ code {
   background: var(--surface-2);
   color: var(--text);
   border-color: var(--border);
-  white-space: nowrap;
 }
 
 .badge--scope::before {
@@ -1083,7 +1456,7 @@ code {
 
 /* Status + lock badges side by side in a table cell. No wrapping: a wrapping
    row lets auto table layout squeeze the column to one badge wide even when
-   there is room; narrow screens scroll the table (.table-wrap) instead. */
+   there is room. */
 .badge-row {
   display: flex;
   align-items: center;
@@ -1101,6 +1474,20 @@ code {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+}
+
+/* A table that IS the rest of its card: bleeds to the card edges, no second
+   frame. */
+.table-wrap--flush {
+  margin: 0 calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5));
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: none;
+}
+
+.card .table-wrap:not(.table-wrap--flush) {
+  box-shadow: none;
 }
 
 .table {
@@ -1122,10 +1509,19 @@ code {
   white-space: nowrap;
 }
 
+.table th.num {
+  text-align: right;
+}
+
 .table td {
   padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+  transition: background-color var(--dur-1) ease, opacity var(--dur-2) ease;
+}
+
+.table--files td {
+  padding-block: var(--sp-2);
 }
 
 .table tbody tr:last-child td {
@@ -1133,42 +1529,147 @@ code {
 }
 
 .table tbody tr:hover td {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
 }
 
+/* The row whose file is open in the editor / rename card. */
 .table tbody tr.is-editing td {
   background: var(--accent-soft);
+}
+
+.table tbody tr.is-editing td:first-child {
   box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* A row whose action is in flight dims until the swap lands. */
+.table tbody tr:has(.htmx-request) td {
+  opacity: 0.55;
 }
 
 .table .num {
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   white-space: nowrap;
+  text-align: right;
+}
+
+/* The project name column keeps a readable measure before others shrink;
+   cells are a little tighter, and the date may wrap after its comma. */
+.table--projects .cell-main {
+  min-width: 14rem;
+}
+
+.table--projects th,
+.table--projects td {
+  padding-inline: var(--sp-3);
+}
+
+.table--projects th:first-child,
+.table--projects td:first-child {
+  padding-left: var(--sp-4);
+}
+
+.table--projects .cell-updated {
+  white-space: normal;
+  min-width: 6.5rem;
 }
 
 .cell-name {
   font-weight: var(--fw-medium);
   color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+a.cell-name:hover {
+  color: var(--accent);
+}
+
+.cell-sub {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+}
+
+.cell-sub code {
+  color: var(--text-muted);
 }
 
 .cell-path {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text);
-  word-break: break-all;
+}
+
+/* Folder muted, file name in full ink. The two spans give a natural line
+   break point at the folder boundary; long names still wrap anywhere. */
+.path {
+  overflow-wrap: anywhere;
+}
+
+.path__dir {
+  color: var(--text-muted);
+}
+
+.path__base {
+  font-weight: var(--fw-medium);
+}
+
+/* Actions keep to one line on wide screens; their column takes only what it
+   needs, and the name/path column gets the rest. */
+.cell-actions {
+  width: 1%;
+  white-space: nowrap;
 }
 
 .row-actions {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
   justify-content: flex-end;
-  flex-wrap: wrap;
 }
 
 .inline-form {
   display: inline;
+}
+
+/* File rows: each action has its own slot, so "Rename" or "Delete" sits in
+   the same place on every row whether or not the row can be edited or made
+   the landing page. Slot widths fit the labels at the 13px button size. */
+.row-actions--slots {
+  display: grid;
+  grid-template-columns: 3rem 4.5rem 7.5rem 4rem;
+  justify-items: start;
+  gap: 0 var(--sp-1);
+}
+
+.act-edit { grid-column: 1; }
+.act-rename { grid-column: 2; }
+.act-index { grid-column: 3; }
+.act-delete { grid-column: 4; }
+
+.filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: min(100%, 16rem);
+  animation: pp-rise var(--dur-2) var(--ease-out);
+}
+
+.filter .input {
+  padding-left: var(--sp-6);
+}
+
+.filter__icon {
+  position: absolute;
+  left: var(--sp-3);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.filter-empty {
+  padding: var(--sp-5);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
 }
 
 /* ---------- Empty state ---------- */
@@ -1178,6 +1679,11 @@ code {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
   background: var(--surface);
+}
+
+.empty--inset {
+  padding: var(--sp-8) var(--sp-5);
+  background: var(--surface-2);
 }
 
 .empty__icon {
@@ -1192,9 +1698,13 @@ code {
 
 .empty__text {
   margin: var(--sp-2) auto var(--sp-5);
-  max-width: 42ch;
+  max-width: 44ch;
   color: var(--text-muted);
   font-size: var(--fs-sm);
+}
+
+.empty__text:last-child {
+  margin-bottom: 0;
 }
 
 /* ---------- Login ---------- */
@@ -1207,7 +1717,21 @@ code {
 
 .login-card {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
+  animation: pp-rise var(--dur-3) var(--ease-out);
+}
+
+/* Wrong password: one short horizontal shake on the re-rendered card. */
+.login-card--error {
+  animation: pp-shake 320ms var(--ease-out);
+}
+
+@keyframes pp-shake {
+  0%, 100% { transform: none; }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
 }
 
 .login-card .card__body {
@@ -1231,6 +1755,11 @@ code {
   color: var(--text-muted);
   font-size: var(--fs-sm);
   margin: 0 0 var(--sp-5);
+}
+
+.login-card .form-actions,
+.login-card .btn--block {
+  margin-top: var(--sp-5);
 }
 
 /* Visitor unlock page (site_lock.html) reuses the login card; the eyebrow names
@@ -1285,13 +1814,10 @@ code {
   color: var(--text-muted);
 }
 
-.stack-3 > * + * {
-  margin-top: var(--sp-3);
-}
-
 .meta-line {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--sp-2) var(--sp-4);
   font-size: var(--fs-sm);
   color: var(--text-muted);
@@ -1303,6 +1829,10 @@ code {
   font-weight: var(--fw-medium);
 }
 
+.meta-link code {
+  color: var(--accent);
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 640px) {
   .app-header__inner,
@@ -1311,18 +1841,18 @@ code {
     padding-right: var(--sp-4);
   }
 
-  /* Brand + nav + Log out fit a 360px screen: tighter gaps, and the logout
-     form takes the free space itself instead of a spacer plus two gaps. */
+  .app-main {
+    padding-top: var(--sp-5);
+  }
+
+  /* Brand mark + nav + Log out fit a 360px screen: tighter gaps, and the
+     brand keeps its name for screen readers only. */
   .app-header__inner {
     gap: var(--sp-3);
   }
 
-  .app-header__spacer {
-    display: none;
-  }
-
-  .app-header__inner > form {
-    margin-left: auto;
+  .app-nav a {
+    padding: var(--sp-1) var(--sp-2);
   }
 
   .page-head {
@@ -1331,11 +1861,20 @@ code {
   }
 
   .page-head__actions .btn {
-    width: 100%;
+    flex: 1 1 auto;
   }
 
-  .app-nav a {
-    padding: var(--sp-1) var(--sp-2);
+  .card__body {
+    padding: var(--sp-4);
+  }
+
+  .table-wrap--flush {
+    margin: 0 calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4));
+  }
+
+  .confirm__panel .btn,
+  .confirm__panel form {
+    width: 100%;
   }
 
   .spec-list {
@@ -1345,5 +1884,181 @@ code {
 
   .spec-list dd + dt {
     margin-top: var(--sp-3);
+  }
+
+  /* Stacked tables: one block per row. Name/path and status share the first
+     line, labelled meta values follow inline, actions wrap underneath with
+     full-size touch targets. */
+  .table--stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .table--stack,
+  .table--stack tbody {
+    display: block;
+  }
+
+  .table--stack tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-1) var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table--stack tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .table--stack td,
+  .table--stack td:first-child {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  .table--stack tbody tr:hover td,
+  .table--stack tbody tr.is-editing td {
+    background: none;
+  }
+
+  .table--stack tbody tr.is-editing {
+    background: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  .table--stack tbody tr.is-editing td:first-child {
+    box-shadow: none;
+  }
+
+  .table--stack .cell-main,
+  .table--stack .cell-path {
+    flex: 1 1 0;
+    min-width: 45%;
+  }
+
+  .table--stack .cell-status {
+    flex: none;
+  }
+
+  /* Line 1: name + status. A zero-height flex item that spans the row forces
+     the labelled meta values onto line 2 and the actions onto line 3. */
+  .table--stack tr::before {
+    content: "";
+    order: 2;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .table--stack .cell-main,
+  .table--stack .cell-path,
+  .table--stack .cell-status {
+    order: 1;
+  }
+
+  .table--stack .cell-meta {
+    order: 3;
+    text-align: left;
+    font-size: var(--fs-xs);
+  }
+
+  .table--stack .cell-meta::before {
+    content: attr(data-label) " ";
+    color: var(--text-faint);
+  }
+
+  .table--stack .cell-actions {
+    order: 4;
+    flex: 1 0 100%;
+    width: auto;
+    white-space: normal;
+  }
+
+  .table--stack .row-actions--slots {
+    display: flex;
+  }
+
+  .table--stack .row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-left: calc(-1 * var(--sp-3));
+  }
+
+  .table--stack .btn--sm {
+    min-height: 36px;
+    padding-inline: var(--sp-2);
+  }
+
+  .table--stack .row-actions {
+    margin-left: calc(-1 * var(--sp-2));
+  }
+
+  /* Files: the size sits right of the path on the first line. */
+  .table--files tr::before {
+    content: none;
+  }
+
+  .table--files .cell-meta {
+    flex: none;
+    order: 1;
+  }
+
+  .table--files .cell-meta::before {
+    content: none;
+  }
+
+  .table--files .cell-actions {
+    order: 2;
+  }
+}
+
+@media (max-width: 400px) {
+  .brand__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+/* Every animation and transition is cut to an instant. Busy states still read
+   through their labels ("Uploading…") and the static request bar. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .request-bar::before {
+    animation: none !important;
+    transform: none;
+    opacity: 0.7;
+  }
+
+  .btn.is-busy::before {
+    animation: none !important;
+    border-right-color: currentColor;
+    opacity: 0.5;
+  }
+
+  .brand:hover .brand__mark,
+  .dropzone__drop:hover .dropzone__icon,
+  .dropzone__drop:focus-within .dropzone__icon,
+  .dropzone--drag .dropzone__icon,
+  .btn:active {
+    transform: none;
   }
 }

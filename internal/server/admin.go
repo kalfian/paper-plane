@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -182,8 +183,9 @@ func (s *Server) handleProjectCreate(w http.ResponseWriter, r *http.Request) {
 
 	added, upErr := s.processUploads(p.ID, r)
 	if upErr != nil {
-		// The project exists; surface the upload problem on the file manager.
-		http.Redirect(w, r, s.filesURL(p.ID, "flash="+uploadErrorMessage(upErr)), http.StatusSeeOther)
+		// The project exists; surface the upload problem on the file manager as
+		// an error (not a success flash), so it reads as a failure.
+		http.Redirect(w, r, s.filesURL(p.ID, "error="+url.QueryEscape("Project created, but the files were not uploaded: ")+uploadErrorMessage(upErr)), http.StatusSeeOther)
 		return
 	}
 	if added == 0 {
@@ -258,7 +260,8 @@ func (s *Server) handleProjectRelink(w http.ResponseWriter, r *http.Request) {
 	s.setStatusAndRedirect(w, r, model.StatusActive)
 }
 
-// setStatusAndRedirect updates a project's status then returns to the list.
+// setStatusAndRedirect updates a project's status then returns to the list
+// with a flash naming the project and what changed for its visitors.
 func (s *Server) setStatusAndRedirect(w http.ResponseWriter, r *http.Request, status model.Status) {
 	id := r.PathValue("id")
 	if err := s.store.SetStatus(r.Context(), id, status); err != nil {
@@ -270,7 +273,20 @@ func (s *Server) setStatusAndRedirect(w http.ResponseWriter, r *http.Request, st
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/_app/projects", http.StatusSeeOther)
+	http.Redirect(w, r, "/_app/projects?flash="+url.QueryEscape(statusFlash(r, s, id, status)), http.StatusSeeOther)
+}
+
+// statusFlash words the unlink/relink confirmation. It names the project when
+// it can be loaded and falls back to a generic sentence otherwise.
+func statusFlash(r *http.Request, s *Server, id string, status model.Status) string {
+	subject := "The site"
+	if p, err := s.store.GetProject(r.Context(), id); err == nil {
+		subject = "“" + p.Name + "”"
+	}
+	if status == model.StatusActive {
+		return subject + " is live again."
+	}
+	return subject + " is offline. Its files are kept; relink it to publish again."
 }
 
 // handleProjectDelete removes the project row and its site directory.

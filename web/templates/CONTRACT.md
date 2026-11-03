@@ -19,6 +19,20 @@ this file and the corresponding handler together.
   field `CSRFToken`. For htmx, expose it however the layout prefers (e.g. a
   `<meta>` tag or `hx-headers`).
 
+### Layout helpers (`layout.html`, `render.go`)
+
+- Template funcs (`funcMap` in `render.go`): `pathDir "a/b/c.css"` → `"a/b/"`
+  (`""` at the site root), `pathBase "a/b/c.css"` → `"c.css"`,
+  `plural n "file" "files"` → singular when `n == 1`.
+- Partials for layout pages: `{{template "alert-success" .Flash}}` (role
+  `status`, carries `[data-flash]` so `app.js` announces it after htmx swaps
+  through the layout's persistent `#pp-announcer` live region) and
+  `{{template "alert-error" .Error}}` (role `alert`).
+- Primary-nav state: a page defines `{{define "nav-projects"}} aria-current="page"{{end}}`
+  (or `nav-settings`); the block renders inside the nav link's start tag.
+- `app.js` removes `?flash=` / `?error=` from the address bar after load (so a
+  reload does not repeat a message); handlers keep using them as before.
+
 ## Handlers → templates (implemented in Phases 0–2)
 
 ### `GET /_app/login` → `login.html`
@@ -107,7 +121,12 @@ re-render (HTTP 200) with `Error`; passwords are never echoed back.
   stored), plus `NewKeyScope` / `NewKeyMCP` and, for MCP-capable scopes, the
   three `MCP*` snippets.
 - Revoke: POST `/_app/settings/api-keys/{id}/delete` with `csrf_token`. Redirects
-  `303` to `/_app/settings` with a flash.
+  `303` to `/_app/settings?flash=Access+token+revoked.`; an unknown id redirects
+  with `?error=That+token+no+longer+exists.`, which `GET /_app/settings` reads
+  into `KeyError` (shown in the access tokens card).
+
+`Error` (change-password failures) renders inside the Change password card,
+next to the fields it concerns; only `Flash` is page-level.
 
 Tokens can also be minted from the CLI: `paperplane token create --name <name>
 --scope mcp` (Docker: `docker compose exec paperplane /paperplane token create
@@ -140,8 +159,14 @@ a password to view the site; rendered as a `.badge--lock` "password" badge next
 to the status badge, inside a `.badge-row`).
 
 Forms on this page (all POST, all need `csrf_token`):
-- `/_app/projects/{id}/unlink`, `/_app/projects/{id}/relink`,
-  `/_app/projects/{id}/delete`, `/_app/logout`.
+- `/_app/projects/{id}/unlink`, `/_app/projects/{id}/relink`, `/_app/logout`.
+  Unlink/relink redirect `303` back here with a flash naming the project
+  (`“<name>” is offline. …` / `“<name>” is live again.`).
+- Delete is **not** offered in the list (irreversible); it lives in the
+  project page's danger zone (see below). The route is unchanged.
+
+The page also reads `?flash=` into `Flash`. The table restacks into one block
+per project under 640px (`.table--stack`, `[data-label]` on meta cells).
 
 ### `GET /_app/projects/new` → `project_new.html`
 Create form. Data `projectNewData`:
@@ -170,7 +195,14 @@ accumulation and the list. Server side (see below), a lone non-`index.html` HTML
 upload is stored as `index.html`.
 
 On success: redirect `303` to the file manager. On failure: re-render (HTTP 200)
-with `Error`.
+with `Error`. If the project was created but the upload failed, the redirect
+carries `?error=Project created, but the files were not uploaded: <reason>`
+(an error, not a success flash).
+
+Enhancements (`app.js`): `[data-slug-source]` (name) / `[data-slug-target]`
+(slug) — the slug follows the slugified name until the user types in it;
+`[data-slug-preview]` shows the resulting URL; `[data-busy-label]` on the form
+labels the submit button while the request is in flight.
 
 ### `GET /_app/projects/{id}` → `project_edit.html`
 Rename form (slug is immutable in MVP). Data `projectEditData`:
@@ -199,6 +231,11 @@ forms are plain POSTs (no htmx), so password managers see a real submit:
 - Remove (only when `Project.Protected`): POST `/_app/projects/{id}/password/remove`
   with `csrf_token` (guarded by `confirm()`). Redirects `303` with flash
   `Password removed.`.
+
+**Publishing** card: Unlink / Relink (POST, as on the list). **Delete project**
+card: a `<details class="confirm">` whose summary only reveals the consequence
+and the real submit (POST `/_app/projects/{id}/delete` + `csrf_token`), so the
+irreversible action takes two deliberate steps with or without JavaScript.
 
 `PasswordError` shows inline under the password field (`.field-error`,
 `role="alert"`) and sets `aria-invalid` and autofocus on that field; it does
@@ -239,16 +276,26 @@ Data `filesData`:
 |---------------|-------------|--------------------------------------------------|
 | `CSRFToken`   | string      | For upload / save / delete forms.                |
 | `Project`     | projectView | Owning project.                                  |
-| `Files`       | []fileView  | All files (flat). Empty slice if none.           |
+| `Files`       | []fileView  | All files (flat, sorted by path). Empty slice if none. |
 | `Editing`     | bool        | True when a file is loaded in the editor.        |
 | `EditPath`    | string      | Relative path of the file being edited.          |
 | `EditContent` | string      | Current file contents (auto-escaped in textarea).|
+| `Renaming`    | bool        | True on `GET …/files/rename?path=`.              |
+| `RenamePath`  | string      | Relative path of the file being renamed.         |
 | `Flash`       | string      | Optional success message (from `?flash=`).       |
 | `Error`       | string      | Optional error message (from `?error=`).         |
 
 `fileView` fields: `Path` (string, slash-separated relative path), `Size`
 (int64), `SizeHuman` (string), `Editable` (bool; text extensions only:
-html/htm/css/js/txt/md/json/svg/xml/csv).
+html/htm/css/js/txt/md/json/svg/xml/csv), `IsHTML` (bool; may be set as the
+landing page), `IsIndex` (bool; this file is the landing page).
+`Project.IndexFile` names the landing page; when no file has `IsIndex` the page
+shows a "No landing page" warning (the site root would 404).
+
+Layout: the editor / rename card renders first (above Upload and the list) so
+it is in view on a full page load. Paths render as `.path__dir` + `.path__base`
+(via `pathDir` / `pathBase`). The rename form prefills `pathBase RenamePath`
+(the server rejects slashes and keeps the file in its folder).
 
 Forms on this page (all need `csrf_token`):
 - Upload → POST (multipart) `/_app/projects/{id}/files`, field `files`
@@ -266,11 +313,20 @@ Forms on this page (all need `csrf_token`):
 - Delete file → POST `/_app/projects/{id}/files/delete` with `path`.
 - Edit link → GET `/_app/projects/{id}/files/edit?path=<relpath>`. This route
   also surfaces `?flash=` / `?error=` query values as `Flash` / `Error`.
+- Rename → GET `…/files/rename?path=<relpath>` (form) and POST
+  `…/files/rename` with `path`, `name` (base name only).
+- Set landing page → POST `…/files/index` with `path`.
 
-## Not yet implemented / UI-agent notes
+Enhancements (`app.js`): `[data-file-filter]` (revealed for 8+ files) filters
+rows by `tr[data-path]`; `[data-upload-progress]` shows htmx upload progress;
+`form[data-editor]` warns about unsaved changes (status text, `beforeunload`,
+and an `htmx:confirm` guard) and saves on Ctrl/Cmd+S; `[data-select-stem]`
+selects the file name without its extension on focus.
 
-- `layout.html` exists only as a non-wired stub. The renderer parses all
-  templates into one set and executes by filename, so a shared `content` block
-  name would collide across pages; each page is currently a standalone document.
-  The UI agent must reconcile real layout inheritance with the by-filename
-  renderer (unique block names per page, or clone-per-page rendering).
+## Notes
+
+- Layout inheritance is clone-per-page (see `render.go`): `layout.html` is the
+  shell for every page listed in `layoutPages`; `login.html`, `setup.html` and
+  `site_lock.html` are standalone.
+- Standalone forms carry `data-busy-label`; on a failed attempt the card gets
+  `.login-card--error` (one short shake, none under reduced motion).
